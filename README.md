@@ -10,6 +10,7 @@ ZK Music is a local-first music studio prototype focused on making recording and
 - Real-time vocal chain: high-pass filter, 3-band EQ, compressor, limiter and output gain
 - Local voice-character profiles (Natural, Warm, Bright, Radio and Robot)
 - Local reverb and delay with wet mix, delay time and feedback controls
+- Real-time pitch detection with note, frequency, cents and confidence
 - Performance profiles: Low, Medium, High and Mobile
 - Local preview and export of takes
 - No required cloud backend for the core studio
