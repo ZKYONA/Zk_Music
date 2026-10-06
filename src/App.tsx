@@ -1,5 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { AudioEngine, type VocalFxSettings } from "./audio/AudioEngine";
+import {
+  AudioEngine,
+  type SpaceFxSettings,
+  type VocalFxSettings,
+} from "./audio/AudioEngine";
 import {
   PERFORMANCE_PROFILES,
   detectDefaultProfile,
@@ -10,6 +14,10 @@ import {
   VOICE_ENHANCEMENT_PROFILES,
   type VoiceEnhancementMode,
 } from "./audio/enhancement";
+import {
+  VOICE_CHARACTER_PROFILES,
+  type VoiceCharacterMode,
+} from "./audio/characters";
 
 const INITIAL_FX: VocalFxSettings = {
   highPass: 80,
@@ -18,6 +26,13 @@ const INITIAL_FX: VocalFxSettings = {
   high: 1.5,
   compression: 35,
   output: -1,
+};
+
+const INITIAL_SPACE_FX: SpaceFxSettings = {
+  reverb: 18,
+  delay: 10,
+  feedback: 22,
+  bpm: 120,
 };
 
 function formatDb(value: number): string {
@@ -34,7 +49,9 @@ export default function App() {
 
   const [profile, setProfile] = useState<PerformanceProfile>(initialProfile);
   const [fx, setFx] = useState<VocalFxSettings>(INITIAL_FX);
+  const [spaceFx, setSpaceFx] = useState<SpaceFxSettings>(INITIAL_SPACE_FX);
   const [enhancement, setEnhancement] = useState<VoiceEnhancementMode>("flagship");
+  const [character, setCharacter] = useState<VoiceCharacterMode>("natural");
   const [micReady, setMicReady] = useState(false);
   const [beatName, setBeatName] = useState("");
   const [recording, setRecording] = useState(false);
@@ -53,6 +70,14 @@ export default function App() {
   useEffect(() => {
     engineRef.current?.applyFx(fx);
   }, [fx]);
+
+  useEffect(() => {
+    engineRef.current?.applySpaceFx(spaceFx);
+  }, [spaceFx]);
+
+  useEffect(() => {
+    engineRef.current?.setVoiceCharacterMode(character);
+  }, [character]);
 
   useEffect(() => {
     engineRef.current?.setMonitor(monitor);
@@ -77,6 +102,13 @@ export default function App() {
     value: VocalFxSettings[K],
   ) {
     setFx((current) => ({ ...current, [key]: value }));
+  }
+
+  function setSpaceFxValue<K extends keyof SpaceFxSettings>(
+    key: K,
+    value: SpaceFxSettings[K],
+  ) {
+    setSpaceFx((current) => ({ ...current, [key]: value }));
   }
 
   async function enableMic() {
@@ -156,6 +188,13 @@ export default function App() {
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "No se pudo cambiar la mejora de voz.");
     }
+  }
+
+  function selectCharacter(mode: VoiceCharacterMode) {
+    setError("");
+    engineRef.current?.setVoiceCharacterMode(mode);
+    setCharacter(mode);
+    setStatus("Carácter vocal: " + VOICE_CHARACTER_PROFILES[mode].name + ".");
   }
 
   async function calibrateRoom() {
@@ -252,7 +291,14 @@ export default function App() {
                 <p className="eyebrow">01 · GRABAR</p>
                 <h2>Beat + voz</h2>
               </div>
-              <div className="meter" aria-label="Nivel de entrada">
+              <div
+                className="meter"
+                role="progressbar"
+                aria-label="Nivel de entrada"
+                aria-valuemin={0}
+                aria-valuemax={100}
+                aria-valuenow={Math.round(level * 100)}
+              >
                 <div className="meter-fill" style={{ width: `${Math.max(2, level * 100)}%` }} />
               </div>
             </div>
@@ -328,6 +374,7 @@ export default function App() {
                   className={`profile-option ${profile === id ? "selected" : ""}`}
                   onClick={() => setProfile(id)}
                   disabled={recording}
+                  aria-pressed={profile === id}
                 >
                   <div>
                     <strong>{PERFORMANCE_PROFILES[id].label}</strong>
@@ -358,6 +405,7 @@ export default function App() {
                   className={"preset-button " + (enhancement === mode ? "selected-preset" : "")}
                   onClick={() => void selectEnhancement(mode)}
                   disabled={recording}
+                  aria-pressed={enhancement === mode}
                 >
                   <strong>{item.name}</strong>
                   <small>{item.description}</small>
@@ -383,10 +431,92 @@ export default function App() {
           </div>
         </section>
 
+        <section className="creative-grid">
+          <article className="panel">
+            <div className="panel-heading">
+              <div>
+                <p className="eyebrow">03 · CARÁCTER</p>
+                <h2>Color vocal</h2>
+              </div>
+              <span className="chip">Live FX</span>
+            </div>
+
+            <div className="character-grid">
+              {(Object.keys(VOICE_CHARACTER_PROFILES) as VoiceCharacterMode[]).map((mode) => {
+                const item = VOICE_CHARACTER_PROFILES[mode];
+                return (
+                  <button
+                    key={mode}
+                    className={"character-button " + (character === mode ? "selected-character" : "")}
+                    onClick={() => selectCharacter(mode)}
+                    disabled={recording}
+                    aria-pressed={character === mode}
+                  >
+                    <span className="character-orb" aria-hidden="true" />
+                    <strong>{item.name}</strong>
+                    <small>{item.description}</small>
+                  </button>
+                );
+              })}
+            </div>
+          </article>
+
+          <article className="panel">
+            <div className="panel-heading">
+              <div>
+                <p className="eyebrow">04 · ESPACIO</p>
+                <h2>Reverb + delay</h2>
+              </div>
+              <span className="chip">1/8 sync</span>
+            </div>
+
+            <div className="tempo-card">
+              <div>
+                <strong>Tempo</strong>
+                <small>Sincroniza el delay en corcheas.</small>
+              </div>
+              <label className="tempo-input">
+                <span className="sr-only">Tempo en BPM</span>
+                <input
+                  type="number"
+                  min="50"
+                  max="220"
+                  value={spaceFx.bpm}
+                  onChange={(event) => setSpaceFxValue("bpm", Number(event.target.value))}
+                />
+                <span>BPM</span>
+              </label>
+            </div>
+
+            <div className="space-controls">
+              <label className="control compact-control">
+                <span><strong>Reverb</strong><output>{Math.round(spaceFx.reverb)}%</output></span>
+                <input type="range" min="0" max="100" step="1" value={spaceFx.reverb}
+                  onChange={(event) => setSpaceFxValue("reverb", Number(event.target.value))} />
+                <small>Ambiente estéreo generado localmente.</small>
+              </label>
+
+              <label className="control compact-control">
+                <span><strong>Delay</strong><output>{Math.round(spaceFx.delay)}%</output></span>
+                <input type="range" min="0" max="100" step="1" value={spaceFx.delay}
+                  onChange={(event) => setSpaceFxValue("delay", Number(event.target.value))} />
+                <small>Eco sincronizado al tempo.</small>
+              </label>
+
+              <label className="control compact-control">
+                <span><strong>Feedback</strong><output>{Math.round(spaceFx.feedback)}%</output></span>
+                <input type="range" min="0" max="100" step="1" value={spaceFx.feedback}
+                  onChange={(event) => setSpaceFxValue("feedback", Number(event.target.value))} />
+                <small>Controla cuánto se repite el eco.</small>
+              </label>
+            </div>
+          </article>
+        </section>
+
         <section className="panel">
           <div className="panel-heading">
             <div>
-              <p className="eyebrow">03 · SONIDO</p>
+              <p className="eyebrow">05 · SONIDO</p>
               <h2>Cadena vocal simple</h2>
             </div>
             <span className="chip">Tiempo real</span>
@@ -451,7 +581,7 @@ export default function App() {
         </section>
 
         <footer className="footer">
-          <div>
+          <div role={error ? "alert" : "status"} aria-live={error ? "assertive" : "polite"}>
             <span className={error ? "status-dot error-dot" : "status-dot live"} />
             <span>{error || status}</span>
           </div>
