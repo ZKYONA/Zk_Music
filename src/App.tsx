@@ -54,6 +54,9 @@ export default function App() {
   const [ambience, setAmbience] = useState<AmbienceSettings>(INITIAL_AMBIENCE);
   const [micReady, setMicReady] = useState(false);
   const [beatName, setBeatName] = useState("");
+  const [beatVolume, setBeatVolume] = useState(85);
+  const [metronome, setMetronome] = useState(false);
+  const [bpm, setBpm] = useState(120);
   const [recording, setRecording] = useState(false);
   const [monitor, setMonitor] = useState(false);
   const [calibrating, setCalibrating] = useState(false);
@@ -78,6 +81,14 @@ export default function App() {
   useEffect(() => {
     engineRef.current?.setMonitor(monitor);
   }, [monitor]);
+
+  useEffect(() => {
+    engineRef.current?.setBeatVolume(beatVolume / 100);
+  }, [beatVolume]);
+
+  useEffect(() => {
+    engineRef.current?.setMetronome(metronome, bpm);
+  }, [metronome, bpm]);
 
   useEffect(() => {
     let frame = 0;
