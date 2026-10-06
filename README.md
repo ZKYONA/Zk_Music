@@ -7,7 +7,9 @@ ZK Music is a local-first music studio prototype focused on making recording and
 - Local audio processing by default
 - Import a beat from the user's device
 - Record microphone locally
-- Real-time vocal chain: high-pass filter, 3-band EQ, compressor and output gain
+- Real-time vocal chain: high-pass filter, 3-band EQ, compressor, limiter and output gain
+- Local voice-character profiles (Natural, Warm, Bright, Radio and Robot)
+- Local reverb and delay with wet mix, delay time and feedback controls
 - Performance profiles: Low, Medium, High and Mobile
 - Local preview and export of takes
 - No required cloud backend for the core studio
@@ -33,7 +35,7 @@ Then open the local Vite URL and allow microphone access when prompted.
 
 The target experience is: import a beat, press record, sound good quickly, and only reveal advanced controls when the user wants them.
 
-Pitch correction, automatic mastering, instruments, cloud sync and AI-assisted presets are planned milestones, not mocked features in this first commit.
+Pitch correction, automatic mastering, instruments, cloud sync and AI-assisted presets remain planned milestones. Voice character, room calibration, reverb and delay are implemented locally; AutoTune is intentionally not presented as finished until real pitch correction is available.
 
 ## Status
 
