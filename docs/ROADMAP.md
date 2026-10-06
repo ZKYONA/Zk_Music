@@ -8,7 +8,7 @@
 - [x] Real-time EQ + compression chain
 - [x] Low / Medium / High / Mobile profiles
 - [x] Local take preview and export
-- [ ] Automated build validation
+- [x] Automated build validation
 
 ## Phase 1 — Recording quality
 - Timeline and waveform
@@ -23,8 +23,8 @@
 - Real pitch detection
 - Pitch correction / AutoTune engine
 - Key detection
-- Noise and room analysis
-- De-esser, gate, limiter, reverb and delay
+- [x] Noise and room analysis
+- [x] De-esser, gate, limiter, reverb and delay
 - Smart vocal presets based on measurable audio features
 
 ## Phase 3 — Production
