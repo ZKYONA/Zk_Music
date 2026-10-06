@@ -24,6 +24,7 @@ button:disabled { opacity: 0.42; cursor: not-allowed; }
 
 button:focus-visible,
 input:focus-visible,
+select:focus-visible,
 audio:focus-visible {
   outline: 2px solid #a894ff;
   outline-offset: 3px;
@@ -283,6 +284,148 @@ nav { display: grid; gap: 8px; }
   margin-bottom: 4px;
   color: #9d8aff;
   font-size: 26px;
+}
+
+.pitch-monitor {
+  margin-top: 14px;
+  padding: 14px;
+  display: grid;
+  gap: 12px;
+  border: 1px solid rgba(139, 108, 255, 0.14);
+  border-radius: 16px;
+  background:
+    radial-gradient(circle at 0% 0%, rgba(139, 108, 255, 0.08), transparent 38%),
+    rgba(255, 255, 255, 0.018);
+}
+
+.pitch-monitor-heading,
+.pitch-readout,
+.pitch-stats,
+.tuning-labels {
+  display: flex;
+  align-items: center;
+}
+
+.pitch-monitor-heading,
+.pitch-readout {
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.pitch-monitor-heading strong {
+  font-size: 12px;
+}
+
+.muted-chip {
+  color: #707887;
+  background: rgba(255, 255, 255, 0.035);
+}
+
+.pitch-note {
+  min-width: 84px;
+  display: flex;
+  align-items: flex-start;
+  gap: 2px;
+  color: #f2f4fa;
+}
+
+.pitch-note strong {
+  font-size: 42px;
+  line-height: 0.92;
+  letter-spacing: -0.06em;
+}
+
+.pitch-note span {
+  margin-top: 3px;
+  color: #888fa0;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.pitch-note.tuned strong {
+  color: #68e7a4;
+  text-shadow: 0 0 24px rgba(104, 231, 164, 0.18);
+}
+
+.pitch-stats {
+  flex: 1;
+  justify-content: flex-end;
+  gap: 18px;
+}
+
+.pitch-stats > span {
+  min-width: 74px;
+  display: grid;
+  gap: 3px;
+  text-align: right;
+}
+
+.pitch-stats strong {
+  color: #cfd4df;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.pitch-stats small {
+  color: #747c8b;
+  font-size: 9px;
+}
+
+.tuning-track {
+  position: relative;
+  height: 10px;
+  overflow: visible;
+  border-radius: 999px;
+  background:
+    linear-gradient(
+      90deg,
+      rgba(255, 92, 112, 0.2),
+      rgba(139, 108, 255, 0.18) 35%,
+      rgba(84, 227, 154, 0.24) 50%,
+      rgba(139, 108, 255, 0.18) 65%,
+      rgba(255, 92, 112, 0.2)
+    );
+}
+
+.tuning-center {
+  position: absolute;
+  top: -4px;
+  bottom: -4px;
+  left: 50%;
+  width: 1px;
+  background: rgba(255, 255, 255, 0.55);
+}
+
+.tuning-pointer {
+  position: absolute;
+  top: 50%;
+  width: 12px;
+  height: 12px;
+  border: 2px solid #b9aaff;
+  border-radius: 50%;
+  background: #141824;
+  box-shadow: 0 0 14px rgba(139, 108, 255, 0.28);
+  transform: translate(-50%, -50%);
+  transition: left 90ms linear;
+}
+
+.tuning-pointer.tuned {
+  border-color: #68e7a4;
+  box-shadow: 0 0 15px rgba(104, 231, 164, 0.28);
+}
+
+.tuning-labels {
+  justify-content: space-between;
+  margin-top: -7px;
+  color: #616979;
+  font-size: 8px;
+  font-variant-numeric: tabular-nums;
+}
+
+.pitch-note-help {
+  color: #757d8c;
+  font-size: 9px;
+  line-height: 1.45;
 }
 
 .transport {
@@ -632,6 +775,22 @@ nav { display: grid; gap: 8px; }
   .take-card-library { grid-template-columns: 1fr; }
   .take-actions { width: 100%; }
   .take-actions > button { flex: 1; }
+
+  .pitch-readout {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .pitch-stats {
+    width: 100%;
+    justify-content: space-between;
+    gap: 8px;
+  }
+
+  .pitch-stats > span {
+    min-width: 0;
+    text-align: left;
+  }
 
   .record-button {
     width: 100%;
