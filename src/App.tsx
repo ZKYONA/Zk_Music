@@ -285,6 +285,7 @@ export default function App() {
     setError("");
     try {
       const blob = await engineRef.current!.stopTake();
+      const analysis = await engineRef.current!.analyzeTake(blob);
       const url = URL.createObjectURL(blob);
       takeUrlsRef.current.add(url);
 
@@ -295,6 +296,8 @@ export default function App() {
         url,
         type: blob.type || "audio/webm",
         createdAt,
+        duration: analysis.duration,
+        peaks: analysis.peaks,
       };
 
       setTakes((current) => [take, ...current]);
