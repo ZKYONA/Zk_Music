@@ -39,6 +39,7 @@ export default function App() {
   const [beatName, setBeatName] = useState("");
   const [recording, setRecording] = useState(false);
   const [monitor, setMonitor] = useState(false);
+  const [calibrating, setCalibrating] = useState(false);
   const [takeUrl, setTakeUrl] = useState("");
   const [takeType, setTakeType] = useState("audio/webm");
   const [level, setLevel] = useState(0);
@@ -154,6 +155,30 @@ export default function App() {
       setStatus("Mejora de voz: " + VOICE_ENHANCEMENT_PROFILES[mode].name + ".");
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "No se pudo cambiar la mejora de voz.");
+    }
+  }
+
+  async function calibrateRoom() {
+    setError("");
+    setCalibrating(true);
+    setStatus("Calibrando ruido ambiente…");
+
+    try {
+      const threshold = await engineRef.current?.calibrateRoom();
+      setMicReady(true);
+      setStatus(
+        "Sala calibrada. Umbral de ruido: " +
+          (threshold?.toFixed(1) ?? "—") +
+          " dB.",
+      );
+    } catch (reason) {
+      setError(
+        reason instanceof Error
+          ? reason.message
+          : "No se pudo calibrar el ruido ambiente.",
+      );
+    } finally {
+      setCalibrating(false);
     }
   }
 
@@ -341,12 +366,21 @@ export default function App() {
             })}
           </div>
 
-          <p className="quality-note">
-            Flagship Studio usa reducción de ruido del dispositivo cuando está disponible,
-            puerta de ruido local, ecualización de claridad, control de sibilancia,
-            compresión y limitador. Mejora mucho un micrófono normal, pero no puede
-            recuperar frecuencias que el hardware nunca capturó.
-          </p>
+          <div className="quality-actions">
+            <button
+              className="primary-button"
+              onClick={() => void calibrateRoom()}
+              disabled={recording || calibrating}
+            >
+              {calibrating ? "Calibrando…" : "Calibrar sala"}
+            </button>
+            <p className="quality-note">
+              Flagship Studio usa reducción de ruido del dispositivo cuando está disponible,
+              puerta de ruido local, ecualización de claridad, control de sibilancia,
+              compresión y limitador. “Calibrar sala” mide el ruido real de tu entorno y
+              ajusta el filtro automáticamente.
+            </p>
+          </div>
         </section>
 
         <section className="panel">
