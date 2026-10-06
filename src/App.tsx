@@ -127,6 +127,7 @@ export default function App() {
     useState<PitchCorrectionSettings>(
       savedPreferences.pitchCorrection ?? DEFAULT_PITCH_CORRECTION,
     );
+  const [pitchCorrectionSupported, setPitchCorrectionSupported] = useState(true);
   const [status, setStatus] = useState("Listo para crear.");
   const [error, setError] = useState("");
 
@@ -334,6 +335,9 @@ export default function App() {
     try {
       await engineRef.current?.enableMicrophone();
       setMicReady(true);
+      setPitchCorrectionSupported(
+        engineRef.current?.isPitchCorrectionSupported() ?? false,
+      );
       await refreshInputDevices();
       setStatus("Micrófono conectado. El audio sigue local.");
     } catch (reason) {
@@ -376,6 +380,9 @@ export default function App() {
     try {
       await engineRef.current?.startTake(true);
       setMicReady(true);
+      setPitchCorrectionSupported(
+        engineRef.current?.isPitchCorrectionSupported() ?? false,
+      );
       setRecording(true);
       setStatus(beatName ? "Grabando voz + beat localmente…" : "Grabando voz localmente…");
     } catch (reason) {
@@ -665,6 +672,7 @@ export default function App() {
                   : null
               }
               confidence={pitchReading?.confidence ?? 0}
+              supported={pitchCorrectionSupported}
             />
 
             <div className="transport">
