@@ -374,6 +374,10 @@ export class AudioEngine {
     this.applyAmbience();
   }
 
+  isPitchCorrectionSupported(): boolean {
+    return this.pitchShifter !== null;
+  }
+
   setPitchCorrectionSettings(next: PitchCorrectionSettings): void {
     this.pitchCorrection = {
       enabled: next.enabled,
