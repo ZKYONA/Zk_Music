@@ -151,7 +151,6 @@ export default function App() {
     try {
       await engineRef.current?.setEnhancementMode(mode);
       setEnhancement(mode);
-      setMicReady(true);
       setStatus("Mejora de voz: " + VOICE_ENHANCEMENT_PROFILES[mode].name + ".");
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "No se pudo cambiar la mejora de voz.");
