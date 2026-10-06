@@ -21,12 +21,13 @@ class ZkPitchShifterProcessor extends AudioWorkletProcessor {
   constructor() {
     super();
 
-    this.grainSize = 1536;
+    this.grainSize = 1024;
     this.baseDelay = this.grainSize * 2;
     this.bufferSize = 16384;
     this.buffers = [];
     this.writeIndex = 0;
     this.phase = 0;
+    this.mix = 0;
   }
 
   ensureChannel(channel) {
@@ -85,14 +86,16 @@ class ZkPitchShifterProcessor extends AudioWorkletProcessor {
 
         buffer[this.writeIndex] = dry;
 
-        if (!enabled || Math.abs(ratio - 1) < 0.0005) {
-          destination[frame] = dry;
-          continue;
-        }
+        const shouldShift = enabled && Math.abs(ratio - 1) >= 0.0005;
+        const targetMix = shouldShift ? 1 : 0;
+        this.mix += (targetMix - this.mix) * 0.006;
 
         const shiftedA = this.grainSample(buffer, phaseA, ratio);
         const shiftedB = this.grainSample(buffer, phaseB, ratio);
-        destination[frame] = shiftedA * weightA + shiftedB * weightB;
+        const shifted = shiftedA * weightA + shiftedB * weightB;
+
+        destination[frame] =
+          dry * (1 - this.mix) + shifted * this.mix;
       }
 
       this.writeIndex = (this.writeIndex + 1) % this.bufferSize;
