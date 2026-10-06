@@ -1,5 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { AudioEngine, type VocalFxSettings } from "./audio/AudioEngine";
+import {
+  AudioEngine,
+  type AmbienceSettings,
+  type VocalFxSettings,
+} from "./audio/AudioEngine";
 import {
   PERFORMANCE_PROFILES,
   detectDefaultProfile,
@@ -10,6 +14,10 @@ import {
   VOICE_ENHANCEMENT_PROFILES,
   type VoiceEnhancementMode,
 } from "./audio/enhancement";
+import {
+  VOICE_CHARACTER_PROFILES,
+  type VoiceCharacterMode,
+} from "./audio/characters";
 
 const INITIAL_FX: VocalFxSettings = {
   highPass: 80,
@@ -18,6 +26,13 @@ const INITIAL_FX: VocalFxSettings = {
   high: 1.5,
   compression: 35,
   output: -1,
+};
+
+const INITIAL_AMBIENCE: AmbienceSettings = {
+  reverb: 12,
+  delay: 7,
+  delayMs: 145,
+  feedback: 18,
 };
 
 function formatDb(value: number): string {
@@ -35,6 +50,8 @@ export default function App() {
   const [profile, setProfile] = useState<PerformanceProfile>(initialProfile);
   const [fx, setFx] = useState<VocalFxSettings>(INITIAL_FX);
   const [enhancement, setEnhancement] = useState<VoiceEnhancementMode>("flagship");
+  const [voiceCharacter, setVoiceCharacter] = useState<VoiceCharacterMode>("natural");
+  const [ambience, setAmbience] = useState<AmbienceSettings>(INITIAL_AMBIENCE);
   const [micReady, setMicReady] = useState(false);
   const [beatName, setBeatName] = useState("");
   const [recording, setRecording] = useState(false);
@@ -53,6 +70,10 @@ export default function App() {
   useEffect(() => {
     engineRef.current?.applyFx(fx);
   }, [fx]);
+
+  useEffect(() => {
+    engineRef.current?.setAmbience(ambience);
+  }, [ambience]);
 
   useEffect(() => {
     engineRef.current?.setMonitor(monitor);
@@ -77,6 +98,19 @@ export default function App() {
     value: VocalFxSettings[K],
   ) {
     setFx((current) => ({ ...current, [key]: value }));
+  }
+
+  function setAmbienceValue<K extends keyof AmbienceSettings>(
+    key: K,
+    value: AmbienceSettings[K],
+  ) {
+    setAmbience((current) => ({ ...current, [key]: value }));
+  }
+
+  function selectVoiceCharacter(mode: VoiceCharacterMode) {
+    engineRef.current?.setVoiceCharacter(mode);
+    setVoiceCharacter(mode);
+    setStatus("Carácter de voz: " + VOICE_CHARACTER_PROFILES[mode].name + ".");
   }
 
   async function enableMic() {
@@ -218,7 +252,7 @@ export default function App() {
         </div>
 
         <nav>
-          <button className="nav-item active">Estudio</button>
+          <button className="nav-item active" aria-current="page">Estudio</button>
           <button className="nav-item" disabled>Instrumentos <small>pronto</small></button>
           <button className="nav-item" disabled>Master IA <small>pronto</small></button>
           <button className="nav-item" disabled>Proyectos <small>pronto</small></button>
@@ -252,7 +286,14 @@ export default function App() {
                 <p className="eyebrow">01 · GRABAR</p>
                 <h2>Beat + voz</h2>
               </div>
-              <div className="meter" aria-label="Nivel de entrada">
+              <div
+                className="meter"
+                role="progressbar"
+                aria-label="Nivel de entrada del micrófono"
+                aria-valuemin={0}
+                aria-valuemax={100}
+                aria-valuenow={Math.round(level * 100)}
+              >
                 <div className="meter-fill" style={{ width: `${Math.max(2, level * 100)}%` }} />
               </div>
             </div>
@@ -275,7 +316,12 @@ export default function App() {
               <button className="ghost-button" onClick={previewBeat} disabled={!beatName || recording}>
                 ▶ Beat
               </button>
-              <button className="ghost-button" onClick={stopBeat} disabled={!beatName}>
+              <button
+                className="ghost-button"
+                onClick={stopBeat}
+                disabled={!beatName}
+                aria-label="Detener beat"
+              >
                 ■
               </button>
 
@@ -383,10 +429,91 @@ export default function App() {
           </div>
         </section>
 
+        <section className="panel character-panel">
+          <div className="panel-heading">
+            <div>
+              <p className="eyebrow">03 · CARÁCTER Y AMBIENTE</p>
+              <h2>Color de voz y espacio</h2>
+            </div>
+            <span className="chip">Tiempo real</span>
+          </div>
+
+          <div className="preset-row character-presets">
+            {(Object.keys(VOICE_CHARACTER_PROFILES) as VoiceCharacterMode[]).map((mode) => {
+              const item = VOICE_CHARACTER_PROFILES[mode];
+              return (
+                <button
+                  key={mode}
+                  className={"preset-button " + (voiceCharacter === mode ? "selected-preset" : "")}
+                  onClick={() => selectVoiceCharacter(mode)}
+                  aria-pressed={voiceCharacter === mode}
+                >
+                  <strong>{item.name}</strong>
+                  <small>{item.description}</small>
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="controls-grid ambience-grid">
+            <label className="control">
+              <span><strong>Reverb</strong><output>{Math.round(ambience.reverb)}%</output></span>
+              <input
+                type="range"
+                min="0"
+                max="60"
+                step="1"
+                value={ambience.reverb}
+                onChange={(event) => setAmbienceValue("reverb", Number(event.target.value))}
+              />
+              <small>Espacio y profundidad sin subir tu audio a la nube.</small>
+            </label>
+
+            <label className="control">
+              <span><strong>Delay</strong><output>{Math.round(ambience.delay)}%</output></span>
+              <input
+                type="range"
+                min="0"
+                max="50"
+                step="1"
+                value={ambience.delay}
+                onChange={(event) => setAmbienceValue("delay", Number(event.target.value))}
+              />
+              <small>Eco paralelo para melodías, ad-libs y finales de frase.</small>
+            </label>
+
+            <label className="control">
+              <span><strong>Tiempo</strong><output>{Math.round(ambience.delayMs)} ms</output></span>
+              <input
+                type="range"
+                min="60"
+                max="650"
+                step="5"
+                value={ambience.delayMs}
+                onChange={(event) => setAmbienceValue("delayMs", Number(event.target.value))}
+              />
+              <small>Separación temporal de cada repetición.</small>
+            </label>
+
+            <label className="control">
+              <span><strong>Feedback</strong><output>{Math.round(ambience.feedback)}%</output></span>
+              <input
+                type="range"
+                min="0"
+                max="65"
+                step="1"
+                value={ambience.feedback}
+                onChange={(event) => setAmbienceValue("feedback", Number(event.target.value))}
+              />
+              <small>Cuánto se repite el delay antes de apagarse.</small>
+            </label>
+          </div>
+        </section>
+
         <section className="panel">
           <div className="panel-heading">
             <div>
-              <p className="eyebrow">03 · SONIDO</p>
+              <p className="eyebrow">04 · SONIDO</p>
               <h2>Cadena vocal simple</h2>
             </div>
             <span className="chip">Tiempo real</span>
@@ -451,7 +578,7 @@ export default function App() {
         </section>
 
         <footer className="footer">
-          <div>
+          <div role={error ? "alert" : "status"} aria-live="polite">
             <span className={error ? "status-dot error-dot" : "status-dot live"} />
             <span>{error || status}</span>
           </div>
