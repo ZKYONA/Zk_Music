@@ -132,6 +132,12 @@ export class AudioEngine {
   private recorder: MediaRecorder | null = null;
   private chunks: Blob[] = [];
   private monitorEnabled = false;
+  private preferredInputDeviceId = "";
+  private beatLevel = 0.85;
+  private metronomeEnabled = false;
+  private metronomeBpm = 120;
+  private metronomeTimer: number | null = null;
+  private metronomeBeat = 0;
   private calibratedGateThresholdDb: number | null = null;
   private fx: VocalFxSettings = { ...DEFAULT_FX };
 
@@ -259,7 +265,7 @@ export class AudioEngine {
 
       this.recorderDestination = this.context.createMediaStreamDestination();
       this.beatGain = this.context.createGain();
-      this.beatGain.gain.value = 0.85;
+      this.beatGain.gain.value = this.beatLevel;
 
       try {
         await this.context.audioWorklet.addModule("/worklets/noise-gate.js");
@@ -333,6 +339,9 @@ export class AudioEngine {
         echoCancellation: enhancement.browserEchoCancellation,
         noiseSuppression: enhancement.browserNoiseSuppression,
         autoGainControl: enhancement.browserAutoGain,
+        deviceId: this.preferredInputDeviceId
+          ? { exact: this.preferredInputDeviceId }
+          : undefined,
       },
     });
 
@@ -344,6 +353,89 @@ export class AudioEngine {
     } else {
       this.micSource.connect(this.highPass!);
     }
+  }
+
+  async listInputDevices(): Promise<MediaDeviceInfo[]> {
+    if (!navigator.mediaDevices?.enumerateDevices) return [];
+    const devices = await navigator.mediaDevices.enumerateDevices();
+    return devices.filter((device) => device.kind === "audioinput");
+  }
+
+  async setInputDevice(deviceId: string): Promise<void> {
+    if (deviceId === this.preferredInputDeviceId) return;
+    this.preferredInputDeviceId = deviceId;
+
+    if (this.micStream) {
+      this.disconnectMicrophone();
+      await this.enableMicrophone();
+    }
+  }
+
+  setBeatVolume(value: number): void {
+    this.beatLevel = Math.max(0, Math.min(1, value));
+    if (this.beatGain && this.context) {
+      this.beatGain.gain.setTargetAtTime(this.beatLevel, this.context.currentTime, 0.015);
+    } else if (this.beatGain) {
+      this.beatGain.gain.value = this.beatLevel;
+    }
+  }
+
+  setMetronome(enabled: boolean, bpm = this.metronomeBpm): void {
+    this.metronomeEnabled = enabled;
+    this.metronomeBpm = Math.max(50, Math.min(240, bpm));
+
+    if (this.recorder?.state === "recording") {
+      if (enabled) this.startMetronome();
+      else this.stopMetronome();
+    }
+  }
+
+  setMetronomeBpm(bpm: number): void {
+    this.metronomeBpm = Math.max(50, Math.min(240, bpm));
+    if (this.metronomeEnabled && this.recorder?.state === "recording") {
+      this.startMetronome();
+    }
+  }
+
+  private playMetronomeTick(accent: boolean): void {
+    if (!this.context) return;
+
+    const now = this.context.currentTime;
+    const oscillator = this.context.createOscillator();
+    const gain = this.context.createGain();
+
+    oscillator.type = "sine";
+    oscillator.frequency.value = accent ? 1320 : 880;
+    gain.gain.setValueAtTime(accent ? 0.16 : 0.1, now);
+    gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.045);
+
+    oscillator.connect(gain).connect(this.context.destination);
+    oscillator.start(now);
+    oscillator.stop(now + 0.055);
+  }
+
+  private startMetronome(): void {
+    this.stopMetronome();
+    if (!this.metronomeEnabled || !this.context) return;
+
+    const intervalMs = 60000 / this.metronomeBpm;
+    this.metronomeBeat = 0;
+
+    const tick = () => {
+      this.playMetronomeTick(this.metronomeBeat % 4 === 0);
+      this.metronomeBeat = (this.metronomeBeat + 1) % 4;
+    };
+
+    tick();
+    this.metronomeTimer = window.setInterval(tick, intervalMs);
+  }
+
+  private stopMetronome(): void {
+    if (this.metronomeTimer !== null) {
+      window.clearInterval(this.metronomeTimer);
+      this.metronomeTimer = null;
+    }
+    this.metronomeBeat = 0;
   }
 
   private disconnectMicrophone(): void {
@@ -598,6 +690,7 @@ export class AudioEngine {
     };
 
     this.recorder.start(250);
+    this.startMetronome();
 
     if (playBeat && this.beatBuffer) {
       await this.playBeat();
@@ -619,6 +712,7 @@ export class AudioEngine {
       };
       recorder.stop();
       this.stopBeat();
+      this.stopMetronome();
     });
   }
 
@@ -638,6 +732,7 @@ export class AudioEngine {
 
   dispose(): void {
     this.stopBeat();
+    this.stopMetronome();
     this.disconnectMicrophone();
 
     if (this.context) {
