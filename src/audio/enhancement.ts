@@ -52,7 +52,7 @@ export const VOICE_ENHANCEMENT_PROFILES: Record<VoiceEnhancementMode, VoiceEnhan
     name: "Flagship Studio",
     description: "Perfil premium: voz cercana, firme, limpia y con brillo controlado.",
     browserNoiseSuppression: true,
-    browserEchoCancellation: true,
+    browserEchoCancellation: false,
     browserAutoGain: false,
     gateThresholdDb: -44,
     gateFloorDb: -24,
