@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { RecordingControls } from "./RecordingControls";
 import { PitchMonitor } from "./PitchMonitor";
+import { PitchCorrectionControls } from "./PitchCorrectionControls";
 import { TuningControls } from "./TuningControls";
 import { TakeLibrary, type RecordedTake } from "./TakeLibrary";
 import { loadStudioPreferences, saveStudioPreferences } from "./preferences";
@@ -12,7 +13,9 @@ import {
 } from "./storage/takeStore";
 import {
   AudioEngine,
+  DEFAULT_PITCH_CORRECTION,
   type AmbienceSettings,
+  type PitchCorrectionSettings,
   type PitchReading,
   type VocalFxSettings,
 } from "./audio/AudioEngine";
@@ -32,6 +35,7 @@ import {
 } from "./audio/characters";
 import {
   DEFAULT_TUNING,
+  findNearestScaleTarget,
   type ScaleMode,
   type TuningSettings,
 } from "./audio/tuning";
@@ -119,6 +123,10 @@ export default function App() {
   const [tuning, setTuning] = useState<TuningSettings>(
     savedPreferences.tuning ?? DEFAULT_TUNING,
   );
+  const [pitchCorrection, setPitchCorrection] =
+    useState<PitchCorrectionSettings>(
+      savedPreferences.pitchCorrection ?? DEFAULT_PITCH_CORRECTION,
+    );
   const [status, setStatus] = useState("Listo para crear.");
   const [error, setError] = useState("");
 
@@ -147,6 +155,18 @@ export default function App() {
   }, [metronome, bpm]);
 
   useEffect(() => {
+    engineRef.current?.setPitchCorrectionSettings(pitchCorrection);
+  }, [pitchCorrection]);
+
+  useEffect(() => {
+    const target = findNearestScaleTarget(pitchReading, tuning);
+    engineRef.current?.updatePitchCorrection(
+      target ? -target.centsToTarget : null,
+      pitchReading?.confidence ?? 0,
+    );
+  }, [pitchReading, tuning, pitchCorrection]);
+
+  useEffect(() => {
     saveStudioPreferences({
       profile,
       fx,
@@ -159,6 +179,7 @@ export default function App() {
       monitor,
       inputDeviceId,
       tuning,
+      pitchCorrection,
     });
   }, [
     profile,
@@ -172,6 +193,7 @@ export default function App() {
     monitor,
     inputDeviceId,
     tuning,
+    pitchCorrection,
   ]);
 
   useEffect(() => {
@@ -632,6 +654,17 @@ export default function App() {
               onScaleChange={(scale: ScaleMode) =>
                 setTuning((current) => ({ ...current, scale }))
               }
+            />
+
+            <PitchCorrectionControls
+              settings={pitchCorrection}
+              onChange={setPitchCorrection}
+              targetCents={
+                findNearestScaleTarget(pitchReading, tuning)
+                  ? -findNearestScaleTarget(pitchReading, tuning)!.centsToTarget
+                  : null
+              }
+              confidence={pitchReading?.confidence ?? 0}
             />
 
             <div className="transport">
