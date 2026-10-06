@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { RecordingControls } from "./RecordingControls";
 import { PitchMonitor } from "./PitchMonitor";
+import { TuningControls } from "./TuningControls";
 import { TakeLibrary, type RecordedTake } from "./TakeLibrary";
 import { loadStudioPreferences, saveStudioPreferences } from "./preferences";
 import {
@@ -29,6 +30,11 @@ import {
   VOICE_CHARACTER_PROFILES,
   type VoiceCharacterMode,
 } from "./audio/characters";
+import {
+  DEFAULT_TUNING,
+  type ScaleMode,
+  type TuningSettings,
+} from "./audio/tuning";
 
 const INITIAL_FX: VocalFxSettings = {
   highPass: 80,
@@ -110,6 +116,9 @@ export default function App() {
   const [clipping, setClipping] = useState(false);
   const [recordingSeconds, setRecordingSeconds] = useState(0);
   const [pitchReading, setPitchReading] = useState<PitchReading | null>(null);
+  const [tuning, setTuning] = useState<TuningSettings>(
+    savedPreferences.tuning ?? DEFAULT_TUNING,
+  );
   const [status, setStatus] = useState("Listo para crear.");
   const [error, setError] = useState("");
 
@@ -149,6 +158,7 @@ export default function App() {
       bpm,
       monitor,
       inputDeviceId,
+      tuning,
     });
   }, [
     profile,
@@ -161,6 +171,7 @@ export default function App() {
     bpm,
     monitor,
     inputDeviceId,
+    tuning,
   ]);
 
   useEffect(() => {
@@ -611,6 +622,17 @@ export default function App() {
             />
 
             <PitchMonitor reading={pitchReading} active={micReady} />
+
+            <TuningControls
+              reading={pitchReading}
+              settings={tuning}
+              onRootChange={(root) =>
+                setTuning((current) => ({ ...current, root }))
+              }
+              onScaleChange={(scale: ScaleMode) =>
+                setTuning((current) => ({ ...current, scale }))
+              }
+            />
 
             <div className="transport">
               <button className="ghost-button" onClick={enableMic}>
