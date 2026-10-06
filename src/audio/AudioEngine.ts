@@ -47,9 +47,11 @@ function dbToGain(db: number): number {
   return Math.pow(10, db / 20);
 }
 
-function createDistortionCurve(amount: number): Float32Array {
+function createDistortionCurve(amount: number): Float32Array<ArrayBuffer> {
   const samples = 2048;
-  const curve = new Float32Array(samples);
+  const curve = new Float32Array(
+    new ArrayBuffer(samples * Float32Array.BYTES_PER_ELEMENT),
+  );
   const drive = Math.max(0, amount) * 0.6;
 
   for (let i = 0; i < samples; i += 1) {
