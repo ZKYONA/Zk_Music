@@ -18,7 +18,8 @@
 - [x] Beat volume and metronome
 - [x] Local studio preferences
 - Undo/redo and project autosave via IndexedDB
-- Vocal takes and comping
+- [x] Local multi-take library
+- Vocal comping
 
 ## Phase 2 — Vocal intelligence
 - Real pitch detection
