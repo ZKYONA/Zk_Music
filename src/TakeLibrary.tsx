@@ -4,6 +4,8 @@ export interface RecordedTake {
   url: string;
   type: string;
   createdAt: number;
+  duration: number;
+  peaks: number[];
 }
 
 interface TakeLibraryProps {
@@ -18,6 +20,13 @@ function formatTakeTime(timestamp: number): string {
     hour: "2-digit",
     minute: "2-digit",
   }).format(timestamp);
+}
+
+function formatDuration(seconds: number): string {
+  if (!Number.isFinite(seconds) || seconds <= 0) return "0:00";
+  const minutes = Math.floor(seconds / 60);
+  const remaining = Math.floor(seconds % 60);
+  return `${minutes}:${remaining.toString().padStart(2, "0")}`;
 }
 
 export function TakeLibrary({
@@ -52,7 +61,25 @@ export function TakeLibrary({
               <small>{formatTakeTime(take.createdAt)}</small>
             </div>
 
-            <audio controls preload="metadata" src={take.url} />
+            <div className="take-preview">
+              <div
+                className="waveform"
+                role="img"
+                aria-label={`Forma de onda de ${take.name}`}
+              >
+                {take.peaks.map((peak, peakIndex) => (
+                  <span
+                    className="waveform-bar"
+                    key={peakIndex}
+                    style={{ height: `${Math.max(8, peak * 100)}%` }}
+                  />
+                ))}
+              </div>
+              <div className="take-preview-footer">
+                <audio controls preload="metadata" src={take.url} />
+                <span>{formatDuration(take.duration)}</span>
+              </div>
+            </div>
 
             <div className="take-actions">
               <button
