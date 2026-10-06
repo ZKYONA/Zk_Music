@@ -1,4 +1,4 @@
-import type { AmbienceSettings, VocalFxSettings } from "./audio/AudioEngine";
+import type { AmbienceSettings, PitchCorrectionSettings, VocalFxSettings } from "./audio/AudioEngine";
 import type { VoiceCharacterMode } from "./audio/characters";
 import type { VoiceEnhancementMode } from "./audio/enhancement";
 import type { PerformanceProfile } from "./audio/performance";
@@ -16,6 +16,7 @@ export interface StudioPreferences {
   monitor: boolean;
   inputDeviceId: string;
   tuning: TuningSettings;
+  pitchCorrection: PitchCorrectionSettings;
 }
 
 const STORAGE_KEY = "zk-music:studio-preferences:v1";
