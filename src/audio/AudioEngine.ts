@@ -6,6 +6,10 @@ import {
   VOICE_ENHANCEMENT_PROFILES,
   type VoiceEnhancementMode,
 } from "./enhancement";
+import {
+  VOICE_CHARACTER_PROFILES,
+  type VoiceCharacterMode,
+} from "./characters";
 
 export interface VocalFxSettings {
   highPass: number;
@@ -14,6 +18,13 @@ export interface VocalFxSettings {
   high: number;
   compression: number;
   output: number;
+}
+
+export interface AmbienceSettings {
+  reverb: number;
+  delay: number;
+  delayMs: number;
+  feedback: number;
 }
 
 const DEFAULT_FX: VocalFxSettings = {
@@ -25,8 +36,47 @@ const DEFAULT_FX: VocalFxSettings = {
   output: -1,
 };
 
+const DEFAULT_AMBIENCE: AmbienceSettings = {
+  reverb: 12,
+  delay: 7,
+  delayMs: 145,
+  feedback: 18,
+};
+
 function dbToGain(db: number): number {
   return Math.pow(10, db / 20);
+}
+
+function createDistortionCurve(amount: number): Float32Array {
+  const samples = 2048;
+  const curve = new Float32Array(samples);
+  const drive = Math.max(0, amount) * 0.6;
+
+  for (let i = 0; i < samples; i += 1) {
+    const x = (i * 2) / (samples - 1) - 1;
+    curve[i] = drive === 0 ? x : ((1 + drive) * x) / (1 + drive * Math.abs(x));
+  }
+
+  return curve;
+}
+
+function createReverbImpulse(context: AudioContext, seconds = 1.5): AudioBuffer {
+  const length = Math.max(1, Math.floor(context.sampleRate * seconds));
+  const impulse = context.createBuffer(2, length, context.sampleRate);
+
+  for (let channel = 0; channel < impulse.numberOfChannels; channel += 1) {
+    const data = impulse.getChannelData(channel);
+    let seed = 17 + channel * 101;
+
+    for (let i = 0; i < length; i += 1) {
+      seed = (seed * 16807) % 2147483647;
+      const noise = (seed / 2147483647) * 2 - 1;
+      const decay = Math.pow(1 - i / length, 2.6);
+      data[i] = noise * decay;
+    }
+  }
+
+  return impulse;
 }
 
 function pickMimeType(): string | undefined {
@@ -42,6 +92,8 @@ function pickMimeType(): string | undefined {
 export class AudioEngine {
   private profile: PerformanceProfile;
   private enhancementMode: VoiceEnhancementMode = "flagship";
+  private voiceCharacter: VoiceCharacterMode = "natural";
+  private ambience: AmbienceSettings = { ...DEFAULT_AMBIENCE };
   private context: AudioContext | null = null;
   private micStream: MediaStream | null = null;
   private micSource: MediaStreamAudioSourceNode | null = null;
@@ -53,7 +105,21 @@ export class AudioEngine {
   private deEssEq: BiquadFilterNode | null = null;
   private highEq: BiquadFilterNode | null = null;
   private airEq: BiquadFilterNode | null = null;
+  private characterHighPass: BiquadFilterNode | null = null;
+  private characterLowPass: BiquadFilterNode | null = null;
+  private characterWarmth: BiquadFilterNode | null = null;
+  private characterPresence: BiquadFilterNode | null = null;
+  private characterDistortion: WaveShaperNode | null = null;
+  private ringGain: GainNode | null = null;
+  private ringOscillator: OscillatorNode | null = null;
+  private ringDepth: GainNode | null = null;
   private compressor: DynamicsCompressorNode | null = null;
+  private dryGain: GainNode | null = null;
+  private convolver: ConvolverNode | null = null;
+  private reverbWet: GainNode | null = null;
+  private delayNode: DelayNode | null = null;
+  private delayWet: GainNode | null = null;
+  private delayFeedback: GainNode | null = null;
   private limiter: DynamicsCompressorNode | null = null;
   private master: GainNode | null = null;
   private analyser: AnalyserNode | null = null;
@@ -80,6 +146,20 @@ export class AudioEngine {
 
   getEnhancementMode(): VoiceEnhancementMode {
     return this.enhancementMode;
+  }
+
+  getVoiceCharacter(): VoiceCharacterMode {
+    return this.voiceCharacter;
+  }
+
+  setVoiceCharacter(mode: VoiceCharacterMode): void {
+    this.voiceCharacter = mode;
+    this.applyVoiceCharacter();
+  }
+
+  setAmbience(next: AmbienceSettings): void {
+    this.ambience = { ...next };
+    this.applyAmbience();
   }
 
   async setEnhancementMode(mode: VoiceEnhancementMode): Promise<void> {
@@ -133,7 +213,39 @@ export class AudioEngine {
       this.airEq.type = "highshelf";
       this.airEq.frequency.value = 10500;
 
+      this.characterHighPass = this.context.createBiquadFilter();
+      this.characterHighPass.type = "highpass";
+
+      this.characterLowPass = this.context.createBiquadFilter();
+      this.characterLowPass.type = "lowpass";
+
+      this.characterWarmth = this.context.createBiquadFilter();
+      this.characterWarmth.type = "lowshelf";
+      this.characterWarmth.frequency.value = 220;
+
+      this.characterPresence = this.context.createBiquadFilter();
+      this.characterPresence.type = "peaking";
+      this.characterPresence.frequency.value = 3200;
+      this.characterPresence.Q.value = 0.9;
+
+      this.characterDistortion = this.context.createWaveShaper();
+      this.characterDistortion.oversample = "2x";
+
+      this.ringGain = this.context.createGain();
+      this.ringOscillator = this.context.createOscillator();
+      this.ringOscillator.type = "sine";
+      this.ringDepth = this.context.createGain();
+      this.ringOscillator.connect(this.ringDepth);
+      this.ringDepth.connect(this.ringGain.gain);
+      this.ringOscillator.start();
+
       this.compressor = this.context.createDynamicsCompressor();
+      this.dryGain = this.context.createGain();
+      this.convolver = this.context.createConvolver();
+      this.reverbWet = this.context.createGain();
+      this.delayNode = this.context.createDelay(1.5);
+      this.delayWet = this.context.createGain();
+      this.delayFeedback = this.context.createGain();
       this.limiter = this.context.createDynamicsCompressor();
       this.master = this.context.createGain();
 
@@ -159,8 +271,20 @@ export class AudioEngine {
         .connect(this.deEssEq)
         .connect(this.highEq)
         .connect(this.airEq)
-        .connect(this.compressor)
-        .connect(this.limiter)
+        .connect(this.characterHighPass)
+        .connect(this.characterLowPass)
+        .connect(this.characterWarmth)
+        .connect(this.characterPresence)
+        .connect(this.characterDistortion)
+        .connect(this.ringGain)
+        .connect(this.compressor);
+
+      this.compressor.connect(this.dryGain).connect(this.limiter);
+      this.compressor.connect(this.convolver).connect(this.reverbWet).connect(this.limiter);
+      this.compressor.connect(this.delayNode).connect(this.delayWet).connect(this.limiter);
+      this.delayNode.connect(this.delayFeedback).connect(this.delayNode);
+
+      this.limiter
         .connect(this.master)
         .connect(this.analyser)
         .connect(this.recorderDestination);
@@ -171,8 +295,13 @@ export class AudioEngine {
       this.limiter.attack.value = 0.003;
       this.limiter.release.value = 0.06;
 
+      const reverbSeconds = this.profile === "mobile" || this.profile === "low" ? 1.1 : 1.6;
+      this.convolver.buffer = createReverbImpulse(this.context, reverbSeconds);
+
       this.applyEnhancement();
       this.applyFx(this.fx);
+      this.applyVoiceCharacter();
+      this.applyAmbience();
 
       if (this.monitorEnabled) {
         this.master.connect(this.context.destination);
@@ -224,6 +353,52 @@ export class AudioEngine {
     this.micStream?.getTracks().forEach((track) => track.stop());
     this.micStream = null;
     this.micSource = null;
+  }
+
+  private applyVoiceCharacter(): void {
+    if (!this.context) return;
+
+    const profile = VOICE_CHARACTER_PROFILES[this.voiceCharacter];
+    const now = this.context.currentTime;
+
+    this.characterHighPass?.frequency.setTargetAtTime(profile.highPassHz, now, 0.015);
+    this.characterLowPass?.frequency.setTargetAtTime(profile.lowPassHz, now, 0.015);
+    this.characterWarmth?.gain.setTargetAtTime(profile.warmthDb, now, 0.015);
+    this.characterPresence?.gain.setTargetAtTime(profile.presenceDb, now, 0.015);
+
+    if (this.characterDistortion) {
+      this.characterDistortion.curve = createDistortionCurve(profile.distortion);
+    }
+
+    if (this.ringOscillator && this.ringDepth && this.ringGain) {
+      this.ringOscillator.frequency.setTargetAtTime(
+        Math.max(1, profile.ringModHz || 1),
+        now,
+        0.02,
+      );
+      this.ringDepth.gain.setTargetAtTime(profile.ringModDepth, now, 0.02);
+      this.ringGain.gain.setTargetAtTime(
+        profile.ringModDepth > 0 ? 1 - profile.ringModDepth : 1,
+        now,
+        0.02,
+      );
+    }
+  }
+
+  private applyAmbience(): void {
+    if (!this.context) return;
+
+    const now = this.context.currentTime;
+    const reverb = Math.max(0, Math.min(100, this.ambience.reverb));
+    const delay = Math.max(0, Math.min(100, this.ambience.delay));
+    const delayMs = Math.max(40, Math.min(1000, this.ambience.delayMs));
+    const feedback = Math.max(0, Math.min(70, this.ambience.feedback));
+
+    this.dryGain?.gain.setTargetAtTime(1, now, 0.02);
+    this.reverbWet?.gain.setTargetAtTime((reverb / 100) * 0.75, now, 0.02);
+    this.delayWet?.gain.setTargetAtTime((delay / 100) * 0.7, now, 0.02);
+    this.delayNode?.delayTime.setTargetAtTime(delayMs / 1000, now, 0.02);
+    this.delayFeedback?.gain.setTargetAtTime(feedback / 100, now, 0.02);
   }
 
   private applyEnhancement(): void {
