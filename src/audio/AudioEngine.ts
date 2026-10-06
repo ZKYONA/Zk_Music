@@ -405,27 +405,39 @@ export class AudioEngine {
     const now = this.context.currentTime;
     const ratioParam = this.pitchShifter.parameters.get("ratio");
     const enabledParam = this.pitchShifter.parameters.get("enabled");
+    const distance =
+      centsCorrection === null || !Number.isFinite(centsCorrection)
+        ? Number.POSITIVE_INFINITY
+        : Math.abs(centsCorrection);
+    const confidenceFloor = distance > 100 ? 0.74 : 0.62;
 
     const valid =
       this.pitchCorrection.enabled &&
       centsCorrection !== null &&
       Number.isFinite(centsCorrection) &&
-      confidence >= 0.62;
+      distance <= 180 &&
+      confidence >= confidenceFloor;
 
-    enabledParam?.setTargetAtTime(valid ? 1 : 0, now, 0.01);
+    enabledParam?.setTargetAtTime(valid ? 1 : 0, now, 0.012);
 
     if (!valid) {
-      ratioParam?.setTargetAtTime(1, now, 0.02);
+      ratioParam?.setTargetAtTime(1, now, 0.035);
       return;
     }
 
     const strength = this.pitchCorrection.strength / 100;
+    const deadZoneCents = 3;
+    const rawCorrection =
+      Math.abs(centsCorrection) <= deadZoneCents ? 0 : centsCorrection;
     const appliedCents = Math.max(
-      -300,
-      Math.min(300, centsCorrection * strength),
+      -180,
+      Math.min(180, rawCorrection * strength),
     );
     const ratio = Math.pow(2, appliedCents / 1200);
-    const timeConstant = Math.max(0.008, this.pitchCorrection.retuneMs / 1000 / 3);
+    const timeConstant = Math.max(
+      0.012,
+      this.pitchCorrection.retuneMs / 1000 / 3,
+    );
 
     ratioParam?.setTargetAtTime(ratio, now, timeConstant);
   }
