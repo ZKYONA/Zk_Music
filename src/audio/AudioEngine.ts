@@ -38,6 +38,15 @@ export interface InputMetrics {
   clipping: boolean;
 }
 
+export interface PitchReading {
+  frequency: number;
+  midi: number;
+  note: string;
+  octave: number;
+  cents: number;
+  confidence: number;
+}
+
 const DEFAULT_FX: VocalFxSettings = {
   highPass: 80,
   low: 0,
@@ -138,6 +147,126 @@ function audioBufferToWav(buffer: AudioBuffer): Blob {
   return new Blob([bytes], { type: "audio/wav" });
 }
 
+const NOTE_NAMES = ["C", "C♯", "D", "D♯", "E", "F", "F♯", "G", "G♯", "A", "A♯", "B"];
+
+function detectPitchYin(
+  samples: Float32Array,
+  sampleRate: number,
+): PitchReading | null {
+  let mean = 0;
+  let energy = 0;
+
+  for (const sample of samples) {
+    mean += sample;
+  }
+  mean /= samples.length;
+
+  for (const sample of samples) {
+    const centered = sample - mean;
+    energy += centered * centered;
+  }
+
+  const rms = Math.sqrt(energy / samples.length);
+  if (rms < 0.008) return null;
+
+  const minFrequency = 65;
+  const maxFrequency = 1100;
+  const minTau = Math.max(2, Math.floor(sampleRate / maxFrequency));
+  const maxTau = Math.min(
+    samples.length - 2,
+    Math.floor(sampleRate / minFrequency),
+  );
+
+  if (maxTau <= minTau) return null;
+
+  const difference = new Float32Array(maxTau + 1);
+
+  for (let tau = 1; tau <= maxTau; tau += 1) {
+    let sum = 0;
+    const limit = samples.length - tau;
+
+    for (let index = 0; index < limit; index += 1) {
+      const delta =
+        (samples[index] - mean) - (samples[index + tau] - mean);
+      sum += delta * delta;
+    }
+
+    difference[tau] = sum;
+  }
+
+  let runningSum = 0;
+  difference[0] = 1;
+
+  for (let tau = 1; tau <= maxTau; tau += 1) {
+    runningSum += difference[tau];
+    difference[tau] =
+      runningSum === 0 ? 1 : (difference[tau] * tau) / runningSum;
+  }
+
+  const threshold = 0.16;
+  let bestTau = -1;
+
+  for (let tau = minTau; tau <= maxTau; tau += 1) {
+    if (difference[tau] < threshold) {
+      while (
+        tau + 1 <= maxTau &&
+        difference[tau + 1] < difference[tau]
+      ) {
+        tau += 1;
+      }
+      bestTau = tau;
+      break;
+    }
+  }
+
+  if (bestTau < 0) {
+    let bestValue = 1;
+    for (let tau = minTau; tau <= maxTau; tau += 1) {
+      if (difference[tau] < bestValue) {
+        bestValue = difference[tau];
+        bestTau = tau;
+      }
+    }
+
+    if (bestTau < 0 || bestValue > 0.28) return null;
+  }
+
+  const previous = difference[Math.max(minTau, bestTau - 1)];
+  const current = difference[bestTau];
+  const next = difference[Math.min(maxTau, bestTau + 1)];
+  const denominator = previous - 2 * current + next;
+  const shift =
+    Math.abs(denominator) > 1e-9
+      ? 0.5 * (previous - next) / denominator
+      : 0;
+  const refinedTau = Math.max(minTau, bestTau + shift);
+  const frequency = sampleRate / refinedTau;
+
+  if (
+    !Number.isFinite(frequency) ||
+    frequency < minFrequency ||
+    frequency > maxFrequency
+  ) {
+    return null;
+  }
+
+  const midiFloat = 69 + 12 * Math.log2(frequency / 440);
+  const midi = Math.round(midiFloat);
+  const noteIndex = ((midi % 12) + 12) % 12;
+  const octave = Math.floor(midi / 12) - 1;
+  const cents = Math.max(-50, Math.min(50, (midiFloat - midi) * 100));
+  const confidence = Math.max(0, Math.min(1, 1 - current));
+
+  return {
+    frequency,
+    midi,
+    note: NOTE_NAMES[noteIndex],
+    octave,
+    cents,
+    confidence,
+  };
+}
+
 function pickMimeType(): string | undefined {
   const candidates = [
     "audio/webm;codecs=opus",
@@ -182,6 +311,7 @@ export class AudioEngine {
   private limiter: DynamicsCompressorNode | null = null;
   private master: GainNode | null = null;
   private analyser: AnalyserNode | null = null;
+  private pitchAnalyser: AnalyserNode | null = null;
   private recorderDestination: MediaStreamAudioDestinationNode | null = null;
   private beatBuffer: AudioBuffer | null = null;
   private beatSource: AudioBufferSourceNode | null = null;
@@ -320,6 +450,10 @@ export class AudioEngine {
       this.analyser.fftSize = config.analyserFftSize;
       this.analyser.smoothingTimeConstant = 0.78;
 
+      this.pitchAnalyser = this.context.createAnalyser();
+      this.pitchAnalyser.fftSize = 2048;
+      this.pitchAnalyser.smoothingTimeConstant = 0;
+
       this.recorderDestination = this.context.createMediaStreamDestination();
       this.beatGain = this.context.createGain();
       this.beatGain.gain.value = this.beatLevel;
@@ -407,8 +541,10 @@ export class AudioEngine {
     if (this.noiseGate) {
       this.micSource.connect(this.noiseGate);
       this.noiseGate.connect(this.highPass!);
+      this.noiseGate.connect(this.pitchAnalyser!);
     } else {
       this.micSource.connect(this.highPass!);
+      this.micSource.connect(this.pitchAnalyser!);
     }
   }
 
@@ -818,6 +954,15 @@ export class AudioEngine {
       duration: buffer.duration,
       peaks: normalized,
     };
+  }
+
+  getPitchReading(): PitchReading | null {
+    if (!this.pitchAnalyser || !this.context) return null;
+
+    const values = new Float32Array(this.pitchAnalyser.fftSize);
+    this.pitchAnalyser.getFloatTimeDomainData(values);
+
+    return detectPitchYin(values, this.context.sampleRate);
   }
 
   getInputMetrics(): InputMetrics {
