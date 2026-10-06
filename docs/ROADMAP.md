@@ -28,6 +28,7 @@
 ## Phase 2 — Vocal intelligence
 - [x] Real-time pitch detection
 - [x] Manual key/scale targeting
+- [ ] Pitch correction prototype (experimental worklet)
 - Pitch correction / AutoTune engine
 - Key detection
 - [x] Noise and room analysis
