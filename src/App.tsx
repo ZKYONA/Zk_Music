@@ -54,6 +54,8 @@ export default function App() {
   const [voiceCharacter, setVoiceCharacter] = useState<VoiceCharacterMode>("natural");
   const [ambience, setAmbience] = useState<AmbienceSettings>(INITIAL_AMBIENCE);
   const [micReady, setMicReady] = useState(false);
+  const [inputDevices, setInputDevices] = useState<MediaDeviceInfo[]>([]);
+  const [inputDeviceId, setInputDeviceId] = useState("");
   const [beatName, setBeatName] = useState("");
   const [beatVolume, setBeatVolume] = useState(85);
   const [metronome, setMetronome] = useState(false);
@@ -125,11 +127,41 @@ export default function App() {
     setStatus("Carácter de voz: " + VOICE_CHARACTER_PROFILES[mode].name + ".");
   }
 
+  async function refreshInputDevices() {
+    try {
+      const devices = await engineRef.current?.listInputDevices();
+      const nextDevices = devices ?? [];
+      setInputDevices(nextDevices);
+
+      if (!inputDeviceId && nextDevices.length > 0) {
+        const preferred =
+          nextDevices.find((device) => device.deviceId === "default") ??
+          nextDevices[0];
+        setInputDeviceId(preferred.deviceId);
+      }
+    } catch {
+      setInputDevices([]);
+    }
+  }
+
+  async function changeInputDevice(deviceId: string) {
+    setError("");
+    try {
+      await engineRef.current?.setInputDevice(deviceId);
+      setInputDeviceId(deviceId);
+      const selected = inputDevices.find((device) => device.deviceId === deviceId);
+      setStatus("Entrada activa: " + (selected?.label || "micrófono seleccionado") + ".");
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "No se pudo cambiar el micrófono.");
+    }
+  }
+
   async function enableMic() {
     setError("");
     try {
       await engineRef.current?.enableMicrophone();
       setMicReady(true);
+      await refreshInputDevices();
       setStatus("Micrófono conectado. El audio sigue local.");
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "No se pudo abrir el micrófono.");
