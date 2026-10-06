@@ -47,6 +47,12 @@ export interface PitchReading {
   confidence: number;
 }
 
+export interface PitchCorrectionSettings {
+  enabled: boolean;
+  strength: number;
+  retuneMs: number;
+}
+
 const DEFAULT_FX: VocalFxSettings = {
   highPass: 80,
   low: 0,
@@ -61,6 +67,12 @@ const DEFAULT_AMBIENCE: AmbienceSettings = {
   delay: 7,
   delayMs: 145,
   feedback: 18,
+};
+
+const DEFAULT_PITCH_CORRECTION: PitchCorrectionSettings = {
+  enabled: false,
+  strength: 65,
+  retuneMs: 80,
 };
 
 function dbToGain(db: number): number {
@@ -286,6 +298,7 @@ export class AudioEngine {
   private micStream: MediaStream | null = null;
   private micSource: MediaStreamAudioSourceNode | null = null;
   private noiseGate: AudioWorkletNode | null = null;
+  private pitchShifter: AudioWorkletNode | null = null;
   private highPass: BiquadFilterNode | null = null;
   private lowEq: BiquadFilterNode | null = null;
   private midEq: BiquadFilterNode | null = null;
@@ -328,6 +341,9 @@ export class AudioEngine {
   private metronomeBeat = 0;
   private calibratedGateThresholdDb: number | null = null;
   private fx: VocalFxSettings = { ...DEFAULT_FX };
+  private pitchCorrection: PitchCorrectionSettings = {
+    ...DEFAULT_PITCH_CORRECTION,
+  };
 
   constructor(profile: PerformanceProfile) {
     this.profile = profile;
@@ -356,6 +372,58 @@ export class AudioEngine {
   setAmbience(next: AmbienceSettings): void {
     this.ambience = { ...next };
     this.applyAmbience();
+  }
+
+  setPitchCorrectionSettings(next: PitchCorrectionSettings): void {
+    this.pitchCorrection = {
+      enabled: next.enabled,
+      strength: Math.max(0, Math.min(100, next.strength)),
+      retuneMs: Math.max(10, Math.min(300, next.retuneMs)),
+    };
+
+    if (!this.context || !this.pitchShifter) return;
+
+    const now = this.context.currentTime;
+    this.pitchShifter.parameters
+      .get("enabled")
+      ?.setTargetAtTime(this.pitchCorrection.enabled ? 1 : 0, now, 0.01);
+
+    if (!this.pitchCorrection.enabled) {
+      this.pitchShifter.parameters
+        .get("ratio")
+        ?.setTargetAtTime(1, now, 0.015);
+    }
+  }
+
+  updatePitchCorrection(centsCorrection: number | null, confidence: number): void {
+    if (!this.context || !this.pitchShifter) return;
+
+    const now = this.context.currentTime;
+    const ratioParam = this.pitchShifter.parameters.get("ratio");
+    const enabledParam = this.pitchShifter.parameters.get("enabled");
+
+    const valid =
+      this.pitchCorrection.enabled &&
+      centsCorrection !== null &&
+      Number.isFinite(centsCorrection) &&
+      confidence >= 0.62;
+
+    enabledParam?.setTargetAtTime(valid ? 1 : 0, now, 0.01);
+
+    if (!valid) {
+      ratioParam?.setTargetAtTime(1, now, 0.02);
+      return;
+    }
+
+    const strength = this.pitchCorrection.strength / 100;
+    const appliedCents = Math.max(
+      -300,
+      Math.min(300, centsCorrection * strength),
+    );
+    const ratio = Math.pow(2, appliedCents / 1200);
+    const timeConstant = Math.max(0.008, this.pitchCorrection.retuneMs / 1000 / 3);
+
+    ratioParam?.setTargetAtTime(ratio, now, timeConstant);
   }
 
   async setEnhancementMode(mode: VoiceEnhancementMode): Promise<void> {
@@ -469,6 +537,16 @@ export class AudioEngine {
         this.noiseGate = null;
       }
 
+      try {
+        await this.context.audioWorklet.addModule("/worklets/pitch-shifter.js");
+        this.pitchShifter = new AudioWorkletNode(this.context, "zk-pitch-shifter");
+        this.pitchShifter.parameters
+          .get("enabled")
+          ?.setValueAtTime(this.pitchCorrection.enabled ? 1 : 0, this.context.currentTime);
+      } catch {
+        this.pitchShifter = null;
+      }
+
       this.highPass
         .connect(this.lowEq)
         .connect(this.midEq)
@@ -544,11 +622,23 @@ export class AudioEngine {
 
     if (this.noiseGate) {
       this.micSource.connect(this.noiseGate);
-      this.noiseGate.connect(this.highPass!);
       this.noiseGate.connect(this.pitchAnalyser!);
+
+      if (this.pitchShifter) {
+        this.noiseGate.connect(this.pitchShifter);
+        this.pitchShifter.connect(this.highPass!);
+      } else {
+        this.noiseGate.connect(this.highPass!);
+      }
     } else {
-      this.micSource.connect(this.highPass!);
       this.micSource.connect(this.pitchAnalyser!);
+
+      if (this.pitchShifter) {
+        this.micSource.connect(this.pitchShifter);
+        this.pitchShifter.connect(this.highPass!);
+      } else {
+        this.micSource.connect(this.highPass!);
+      }
     }
   }
 
@@ -639,6 +729,7 @@ export class AudioEngine {
     try {
       this.micSource?.disconnect();
       this.noiseGate?.disconnect();
+      this.pitchShifter?.disconnect();
     } catch {
       // Node may already be disconnected.
     }
