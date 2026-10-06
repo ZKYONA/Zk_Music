@@ -312,6 +312,7 @@ export class AudioEngine {
   private master: GainNode | null = null;
   private analyser: AnalyserNode | null = null;
   private pitchAnalyser: AnalyserNode | null = null;
+  private pitchSink: GainNode | null = null;
   private recorderDestination: MediaStreamAudioDestinationNode | null = null;
   private beatBuffer: AudioBuffer | null = null;
   private beatSource: AudioBufferSourceNode | null = null;
@@ -453,6 +454,9 @@ export class AudioEngine {
       this.pitchAnalyser = this.context.createAnalyser();
       this.pitchAnalyser.fftSize = 2048;
       this.pitchAnalyser.smoothingTimeConstant = 0;
+      this.pitchSink = this.context.createGain();
+      this.pitchSink.gain.value = 0;
+      this.pitchAnalyser.connect(this.pitchSink).connect(this.context.destination);
 
       this.recorderDestination = this.context.createMediaStreamDestination();
       this.beatGain = this.context.createGain();
