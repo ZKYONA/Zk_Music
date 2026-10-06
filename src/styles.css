@@ -424,6 +424,20 @@ nav { display: grid; gap: 8px; }
   accent-color: #8768ff;
 }
 
+.control select {
+  width: 100%;
+  min-height: 38px;
+  padding: 8px 10px;
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 10px;
+  color: #f5f7fb;
+  background: #121722;
+}
+
+.control select:disabled {
+  color: #717887;
+}
+
 .control small { font-size: 10px; }
 
 .footer {
