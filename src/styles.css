@@ -327,6 +327,74 @@ nav { display: grid; gap: 8px; }
   height: 36px;
 }
 
+.take-library {
+  margin-top: 16px;
+  display: grid;
+  gap: 10px;
+}
+
+.take-library-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.take-library-heading strong {
+  font-size: 12px;
+  color: #cdd2dc;
+}
+
+.take-list {
+  display: grid;
+  gap: 9px;
+}
+
+.take-card-library {
+  margin-top: 0;
+  grid-template-columns: minmax(150px, 0.8fr) minmax(220px, 1.4fr) auto;
+}
+
+.take-meta {
+  min-width: 0;
+  display: grid;
+  gap: 5px;
+}
+
+.take-meta small {
+  color: #727a8b;
+  font-size: 10px;
+}
+
+.take-number {
+  color: #8f7cff;
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.take-name-input {
+  width: 100%;
+  min-width: 0;
+  padding: 7px 8px;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 9px;
+  color: #f5f7fb;
+  background: rgba(255, 255, 255, 0.025);
+  font-weight: 700;
+}
+
+.take-actions {
+  display: flex;
+  gap: 7px;
+  align-items: center;
+}
+
+.danger-button:hover:not(:disabled) {
+  border-color: rgba(255, 92, 112, 0.3);
+  color: #ff8797;
+  background: rgba(255, 92, 112, 0.06);
+}
+
 .primary-button {
   padding: 10px 14px;
   border-color: transparent;
@@ -489,6 +557,9 @@ nav { display: grid; gap: 8px; }
 
   .controls-grid, .preset-row { grid-template-columns: 1fr; }
   .take-card { grid-template-columns: 1fr; }
+  .take-card-library { grid-template-columns: 1fr; }
+  .take-actions { width: 100%; }
+  .take-actions > button { flex: 1; }
 
   .record-button {
     width: 100%;
