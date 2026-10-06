@@ -20,7 +20,8 @@
 - [x] Beat volume and metronome
 - [x] Recording peak/clipping meter
 - [x] Local studio preferences
-- Undo/redo and project autosave via IndexedDB
+- Undo/redo
+- [x] Local take persistence via IndexedDB
 - [x] Local multi-take library
 - Vocal comping
 
