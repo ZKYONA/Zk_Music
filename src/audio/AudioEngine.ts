@@ -69,7 +69,7 @@ const DEFAULT_AMBIENCE: AmbienceSettings = {
   feedback: 18,
 };
 
-const DEFAULT_PITCH_CORRECTION: PitchCorrectionSettings = {
+export const DEFAULT_PITCH_CORRECTION: PitchCorrectionSettings = {
   enabled: false,
   strength: 65,
   retuneMs: 80,
