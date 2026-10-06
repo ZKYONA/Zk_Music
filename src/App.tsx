@@ -285,12 +285,21 @@ export default function App() {
     setError("");
     try {
       const blob = await engineRef.current!.stopTake();
-      if (takeUrl) URL.revokeObjectURL(takeUrl);
       const url = URL.createObjectURL(blob);
-      setTakeUrl(url);
-      setTakeType(blob.type || "audio/webm");
+      takeUrlsRef.current.add(url);
+
+      const createdAt = Date.now();
+      const take: RecordedTake = {
+        id: crypto.randomUUID(),
+        name: `Toma ${takes.length + 1}`,
+        url,
+        type: blob.type || "audio/webm",
+        createdAt,
+      };
+
+      setTakes((current) => [take, ...current]);
       setRecording(false);
-      setStatus("Toma lista. Revisa y exporta.");
+      setStatus("Toma guardada en la sesión.");
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "No se pudo cerrar la toma.");
     }
@@ -346,12 +355,29 @@ export default function App() {
     setStatus(`Preset “${preset.name}” aplicado.`);
   }
 
-  function downloadTake() {
-    if (!takeUrl) return;
-    const extension = takeType.includes("mp4") ? "m4a" : "webm";
+  function renameTake(id: string, name: string) {
+    setTakes((current) =>
+      current.map((take) => (take.id === id ? { ...take, name } : take)),
+    );
+  }
+
+  function deleteTake(id: string) {
+    setTakes((current) => {
+      const target = current.find((take) => take.id === id);
+      if (target) {
+        URL.revokeObjectURL(target.url);
+        takeUrlsRef.current.delete(target.url);
+      }
+      return current.filter((take) => take.id !== id);
+    });
+    setStatus("Toma eliminada de esta sesión.");
+  }
+
+  function downloadTake(take: RecordedTake) {
+    const extension = take.type.includes("mp4") ? "m4a" : "webm";
     const anchor = document.createElement("a");
-    anchor.href = takeUrl;
-    anchor.download = `zk-music-take-${Date.now()}.${extension}`;
+    anchor.href = take.url;
+    anchor.download = `${take.name.trim() || "zk-music-take"}.${extension}`;
     anchor.click();
   }
 
