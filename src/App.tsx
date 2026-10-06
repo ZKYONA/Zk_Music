@@ -500,16 +500,12 @@ export default function App() {
               <small>Usa audífonos para evitar feedback.</small>
             </label>
 
-            {takeUrl && (
-              <div className="take-card">
-                <div>
-                  <p className="eyebrow">ÚLTIMA TOMA</p>
-                  <strong>Lista para revisar</strong>
-                </div>
-                <audio controls src={takeUrl} />
-                <button className="primary-button" onClick={downloadTake}>Exportar</button>
-              </div>
-            )}
+            <TakeLibrary
+              takes={takes}
+              onRename={renameTake}
+              onDownload={downloadTake}
+              onDelete={deleteTake}
+            />
           </article>
 
           <article className="panel profile-panel">
