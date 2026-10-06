@@ -6,6 +6,10 @@ import {
   type PerformanceProfile,
 } from "./audio/performance";
 import { VOCAL_PRESETS } from "./audio/presets";
+import {
+  VOICE_ENHANCEMENT_PROFILES,
+  type VoiceEnhancementMode,
+} from "./audio/enhancement";
 
 const INITIAL_FX: VocalFxSettings = {
   highPass: 80,
@@ -30,6 +34,7 @@ export default function App() {
 
   const [profile, setProfile] = useState<PerformanceProfile>(initialProfile);
   const [fx, setFx] = useState<VocalFxSettings>(INITIAL_FX);
+  const [enhancement, setEnhancement] = useState<VoiceEnhancementMode>("flagship");
   const [micReady, setMicReady] = useState(false);
   const [beatName, setBeatName] = useState("");
   const [recording, setRecording] = useState(false);
@@ -138,6 +143,18 @@ export default function App() {
       setStatus("Toma lista. Revisa y exporta.");
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "No se pudo cerrar la toma.");
+    }
+  }
+
+  async function selectEnhancement(mode: VoiceEnhancementMode) {
+    setError("");
+    try {
+      await engineRef.current?.setEnhancementMode(mode);
+      setEnhancement(mode);
+      setMicReady(true);
+      setStatus("Mejora de voz: " + VOICE_ENHANCEMENT_PROFILES[mode].name + ".");
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "No se pudo cambiar la mejora de voz.");
     }
   }
 
@@ -299,10 +316,44 @@ export default function App() {
           </article>
         </section>
 
+        <section className="panel enhancement-panel">
+          <div className="panel-heading">
+            <div>
+              <p className="eyebrow">02 · CALIDAD DE MICRÓFONO</p>
+              <h2>Mejora de voz local</h2>
+            </div>
+            <span className="chip">Sin nube</span>
+          </div>
+
+          <div className="preset-row">
+            {(Object.keys(VOICE_ENHANCEMENT_PROFILES) as VoiceEnhancementMode[]).map((mode) => {
+              const item = VOICE_ENHANCEMENT_PROFILES[mode];
+              return (
+                <button
+                  key={mode}
+                  className={"preset-button " + (enhancement === mode ? "selected-preset" : "")}
+                  onClick={() => void selectEnhancement(mode)}
+                  disabled={recording}
+                >
+                  <strong>{item.name}</strong>
+                  <small>{item.description}</small>
+                </button>
+              );
+            })}
+          </div>
+
+          <p className="quality-note">
+            Flagship Studio usa reducción de ruido del dispositivo cuando está disponible,
+            puerta de ruido local, ecualización de claridad, control de sibilancia,
+            compresión y limitador. Mejora mucho un micrófono normal, pero no puede
+            recuperar frecuencias que el hardware nunca capturó.
+          </p>
+        </section>
+
         <section className="panel">
           <div className="panel-heading">
             <div>
-              <p className="eyebrow">02 · SONIDO</p>
+              <p className="eyebrow">03 · SONIDO</p>
               <h2>Cadena vocal simple</h2>
             </div>
             <span className="chip">Tiempo real</span>
