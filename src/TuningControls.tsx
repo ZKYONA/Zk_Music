@@ -102,7 +102,7 @@ export function TuningControls({
       </div>
 
       <small className="pitch-note-help">
-        El motor ya calcula a qué nota debería moverse la voz; la corrección audible todavía no está activada.
+        El motor calcula la nota objetivo; la corrección audible experimental se controla en el bloque de abajo.
       </small>
     </section>
   );
