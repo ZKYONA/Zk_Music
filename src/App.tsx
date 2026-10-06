@@ -127,9 +127,13 @@ export default function App() {
     useState<PitchCorrectionSettings>(
       savedPreferences.pitchCorrection ?? DEFAULT_PITCH_CORRECTION,
     );
-  const [pitchCorrectionSupported, setPitchCorrectionSupported] = useState(true);
+  const [pitchCorrectionSupported, setPitchCorrectionSupported] = useState(false);
   const [status, setStatus] = useState("Listo para crear.");
   const [error, setError] = useState("");
+  const pitchTarget = useMemo(
+    () => findNearestScaleTarget(pitchReading, tuning),
+    [pitchReading, tuning],
+  );
 
   useEffect(() => {
     engineRef.current?.setProfile(profile);
@@ -160,12 +164,11 @@ export default function App() {
   }, [pitchCorrection]);
 
   useEffect(() => {
-    const target = findNearestScaleTarget(pitchReading, tuning);
     engineRef.current?.updatePitchCorrection(
-      target ? -target.centsToTarget : null,
+      pitchTarget ? -pitchTarget.centsToTarget : null,
       pitchReading?.confidence ?? 0,
     );
-  }, [pitchReading, tuning, pitchCorrection]);
+  }, [pitchTarget, pitchReading, pitchCorrection]);
 
   useEffect(() => {
     saveStudioPreferences({
@@ -335,11 +338,18 @@ export default function App() {
     try {
       await engineRef.current?.enableMicrophone();
       setMicReady(true);
-      setPitchCorrectionSupported(
-        engineRef.current?.isPitchCorrectionSupported() ?? false,
-      );
+      const supported =
+        engineRef.current?.isPitchCorrectionSupported() ?? false;
+      setPitchCorrectionSupported(supported);
+      if (!supported && pitchCorrection.enabled) {
+        setPitchCorrection((current) => ({ ...current, enabled: false }));
+      }
       await refreshInputDevices();
-      setStatus("Micrófono conectado. El audio sigue local.");
+      setStatus(
+        supported
+          ? "Micrófono conectado. El audio sigue local."
+          : "Micrófono conectado. Corrección de pitch no disponible en este navegador.",
+      );
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "No se pudo abrir el micrófono.");
     }
@@ -380,9 +390,12 @@ export default function App() {
     try {
       await engineRef.current?.startTake(true);
       setMicReady(true);
-      setPitchCorrectionSupported(
-        engineRef.current?.isPitchCorrectionSupported() ?? false,
-      );
+      const supported =
+        engineRef.current?.isPitchCorrectionSupported() ?? false;
+      setPitchCorrectionSupported(supported);
+      if (!supported && pitchCorrection.enabled) {
+        setPitchCorrection((current) => ({ ...current, enabled: false }));
+      }
       setRecording(true);
       setStatus(beatName ? "Grabando voz + beat localmente…" : "Grabando voz localmente…");
     } catch (reason) {
@@ -666,11 +679,7 @@ export default function App() {
             <PitchCorrectionControls
               settings={pitchCorrection}
               onChange={setPitchCorrection}
-              targetCents={
-                findNearestScaleTarget(pitchReading, tuning)
-                  ? -findNearestScaleTarget(pitchReading, tuning)!.centsToTarget
-                  : null
-              }
+              targetCents={pitchTarget ? -pitchTarget.centsToTarget : null}
               confidence={pitchReading?.confidence ?? 0}
               supported={pitchCorrectionSupported}
             />
