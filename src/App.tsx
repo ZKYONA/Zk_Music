@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { RecordingControls } from "./RecordingControls";
+import { TakeLibrary, type RecordedTake } from "./TakeLibrary";
 import { loadStudioPreferences, saveStudioPreferences } from "./preferences";
 import {
   AudioEngine,
@@ -80,8 +81,8 @@ export default function App() {
   const [recording, setRecording] = useState(false);
   const [monitor, setMonitor] = useState(savedPreferences.monitor ?? false);
   const [calibrating, setCalibrating] = useState(false);
-  const [takeUrl, setTakeUrl] = useState("");
-  const [takeType, setTakeType] = useState("audio/webm");
+  const [takes, setTakes] = useState<RecordedTake[]>([]);
+  const takeUrlsRef = useRef(new Set<string>());
   const [level, setLevel] = useState(0);
   const [status, setStatus] = useState("Listo para crear.");
   const [error, setError] = useState("");
@@ -161,7 +162,11 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    return () => engineRef.current?.dispose();
+    return () => {
+      engineRef.current?.dispose();
+      takeUrlsRef.current.forEach((url) => URL.revokeObjectURL(url));
+      takeUrlsRef.current.clear();
+    };
   }, []);
 
   function setFxValue<K extends keyof VocalFxSettings>(
