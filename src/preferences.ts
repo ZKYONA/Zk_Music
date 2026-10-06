@@ -2,6 +2,7 @@ import type { AmbienceSettings, VocalFxSettings } from "./audio/AudioEngine";
 import type { VoiceCharacterMode } from "./audio/characters";
 import type { VoiceEnhancementMode } from "./audio/enhancement";
 import type { PerformanceProfile } from "./audio/performance";
+import type { TuningSettings } from "./audio/tuning";
 
 export interface StudioPreferences {
   profile: PerformanceProfile;
@@ -14,6 +15,7 @@ export interface StudioPreferences {
   bpm: number;
   monitor: boolean;
   inputDeviceId: string;
+  tuning: TuningSettings;
 }
 
 const STORAGE_KEY = "zk-music:studio-preferences:v1";
