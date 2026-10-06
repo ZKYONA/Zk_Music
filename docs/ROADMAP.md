@@ -11,11 +11,14 @@
 - [x] Automated build validation
 
 ## Phase 1 — Recording quality
-- Timeline and waveform
+- Timeline editor
+- [x] Take waveform previews
 - Low-latency take alignment
 - WAV/PCM recording path
+- [x] WAV export from recorded takes
 - [x] Input device selector
 - [x] Beat volume and metronome
+- [x] Recording peak/clipping meter
 - [x] Local studio preferences
 - Undo/redo and project autosave via IndexedDB
 - [x] Local multi-take library
