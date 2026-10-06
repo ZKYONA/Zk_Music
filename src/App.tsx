@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { RecordingControls } from "./RecordingControls";
 import {
   AudioEngine,
   type AmbienceSettings,
@@ -319,6 +320,15 @@ export default function App() {
               <strong>{beatName || "Importa tu beat"}</strong>
               <small>{beatName ? "Archivo cargado localmente" : "MP3, WAV, M4A y formatos compatibles"}</small>
             </label>
+
+            <RecordingControls
+              beatVolume={beatVolume}
+              onBeatVolumeChange={setBeatVolume}
+              metronome={metronome}
+              onMetronomeChange={setMetronome}
+              bpm={bpm}
+              onBpmChange={setBpm}
+            />
 
             <div className="transport">
               <button className="ghost-button" onClick={enableMic}>
