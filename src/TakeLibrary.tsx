@@ -6,12 +6,14 @@ export interface RecordedTake {
   createdAt: number;
   duration: number;
   peaks: number[];
+  blob: Blob;
 }
 
 interface TakeLibraryProps {
   takes: RecordedTake[];
   onRename: (id: string, name: string) => void;
   onDownload: (take: RecordedTake) => void;
+  onDownloadWav: (take: RecordedTake) => void;
   onDelete: (id: string) => void;
 }
 
@@ -33,6 +35,7 @@ export function TakeLibrary({
   takes,
   onRename,
   onDownload,
+  onDownloadWav,
   onDelete,
 }: TakeLibraryProps) {
   if (takes.length === 0) return null;
@@ -84,9 +87,15 @@ export function TakeLibrary({
             <div className="take-actions">
               <button
                 className="primary-button"
+                onClick={() => onDownloadWav(take)}
+              >
+                WAV
+              </button>
+              <button
+                className="ghost-button"
                 onClick={() => onDownload(take)}
               >
-                Exportar
+                Original
               </button>
               <button
                 className="ghost-button danger-button"

@@ -42,6 +42,18 @@ function formatDb(value: number): string {
   return `${value > 0 ? "+" : ""}${value.toFixed(1)} dB`;
 }
 
+function formatPeakDb(peak: number): string {
+  const db = 20 * Math.log10(Math.max(peak, 0.0001));
+  return `${db.toFixed(1)} dBFS`;
+}
+
+function formatRecordingTime(seconds: number): string {
+  const whole = Math.max(0, Math.floor(seconds));
+  const minutes = Math.floor(whole / 60);
+  const remaining = whole % 60;
+  return `${minutes}:${remaining.toString().padStart(2, "0")}`;
+}
+
 export default function App() {
   const savedPreferences = useMemo(() => loadStudioPreferences(), []);
   const initialProfile = useMemo(
@@ -84,6 +96,9 @@ export default function App() {
   const [takes, setTakes] = useState<RecordedTake[]>([]);
   const takeUrlsRef = useRef(new Set<string>());
   const [level, setLevel] = useState(0);
+  const [peak, setPeak] = useState(0);
+  const [clipping, setClipping] = useState(false);
+  const [recordingSeconds, setRecordingSeconds] = useState(0);
   const [status, setStatus] = useState("Listo para crear.");
   const [error, setError] = useState("");
 
@@ -154,12 +169,28 @@ export default function App() {
   useEffect(() => {
     let frame = 0;
     const tick = () => {
-      setLevel(engineRef.current?.getInputLevel() ?? 0);
+      const metrics = engineRef.current?.getInputMetrics();
+      setLevel(metrics?.level ?? 0);
+      setPeak(metrics?.peak ?? 0);
+      setClipping(metrics?.clipping ?? false);
       frame = requestAnimationFrame(tick);
     };
     frame = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(frame);
   }, []);
+
+  useEffect(() => {
+    if (!recording) return;
+
+    const startedAt = performance.now();
+    setRecordingSeconds(0);
+
+    const timer = window.setInterval(() => {
+      setRecordingSeconds((performance.now() - startedAt) / 1000);
+    }, 100);
+
+    return () => window.clearInterval(timer);
+  }, [recording]);
 
   useEffect(() => {
     return () => {
@@ -298,6 +329,7 @@ export default function App() {
         createdAt,
         duration: analysis.duration,
         peaks: analysis.peaks,
+        blob,
       };
 
       setTakes((current) => [take, ...current]);
@@ -384,6 +416,24 @@ export default function App() {
     anchor.click();
   }
 
+  async function downloadWavTake(take: RecordedTake) {
+    setError("");
+    setStatus("Preparando WAV localmente…");
+
+    try {
+      const wav = await engineRef.current!.convertToWav(take.blob);
+      const url = URL.createObjectURL(wav);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = `${take.name.trim() || "zk-music-take"}.wav`;
+      anchor.click();
+      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+      setStatus("WAV exportado.");
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "No se pudo exportar a WAV.");
+    }
+  }
+
   return (
     <main className="app-shell">
       <aside className="sidebar">
@@ -430,15 +480,23 @@ export default function App() {
                 <p className="eyebrow">01 · GRABAR</p>
                 <h2>Beat + voz</h2>
               </div>
-              <div
-                className="meter"
-                role="progressbar"
-                aria-label="Nivel de entrada del micrófono"
-                aria-valuemin={0}
-                aria-valuemax={100}
-                aria-valuenow={Math.round(level * 100)}
-              >
-                <div className="meter-fill" style={{ width: `${Math.max(2, level * 100)}%` }} />
+              <div className="recording-meter-block">
+                <div className="recording-meter-meta">
+                  <span className={clipping ? "clip-warning active" : "clip-warning"}>
+                    {clipping ? "CLIP" : formatPeakDb(peak)}
+                  </span>
+                  <span>{recording ? formatRecordingTime(recordingSeconds) : "Listo"}</span>
+                </div>
+                <div
+                  className={clipping ? "meter clipping" : "meter"}
+                  role="progressbar"
+                  aria-label="Nivel de entrada del micrófono"
+                  aria-valuemin={0}
+                  aria-valuemax={100}
+                  aria-valuenow={Math.round(level * 100)}
+                >
+                  <div className="meter-fill" style={{ width: `${Math.max(2, level * 100)}%` }} />
+                </div>
               </div>
             </div>
 
@@ -507,6 +565,7 @@ export default function App() {
               takes={takes}
               onRename={renameTake}
               onDownload={downloadTake}
+              onDownloadWav={(take) => void downloadWavTake(take)}
               onDelete={deleteTake}
             />
           </article>
