@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { RecordingControls } from "./RecordingControls";
+import { PitchMonitor } from "./PitchMonitor";
 import { TakeLibrary, type RecordedTake } from "./TakeLibrary";
 import { loadStudioPreferences, saveStudioPreferences } from "./preferences";
 import {
@@ -11,6 +12,7 @@ import {
 import {
   AudioEngine,
   type AmbienceSettings,
+  type PitchReading,
   type VocalFxSettings,
 } from "./audio/AudioEngine";
 import {
@@ -102,10 +104,12 @@ export default function App() {
   const [takes, setTakes] = useState<RecordedTake[]>([]);
   const takeUrlsRef = useRef(new Set<string>());
   const renameTimersRef = useRef(new Map<string, number>());
+  const lastPitchUpdateRef = useRef(0);
   const [level, setLevel] = useState(0);
   const [peak, setPeak] = useState(0);
   const [clipping, setClipping] = useState(false);
   const [recordingSeconds, setRecordingSeconds] = useState(0);
+  const [pitchReading, setPitchReading] = useState<PitchReading | null>(null);
   const [status, setStatus] = useState("Listo para crear.");
   const [error, setError] = useState("");
 
@@ -194,11 +198,17 @@ export default function App() {
 
   useEffect(() => {
     let frame = 0;
-    const tick = () => {
+    const tick = (timestamp: number) => {
       const metrics = engineRef.current?.getInputMetrics();
       setLevel(metrics?.level ?? 0);
       setPeak(metrics?.peak ?? 0);
       setClipping(metrics?.clipping ?? false);
+
+      if (timestamp - lastPitchUpdateRef.current >= 80) {
+        setPitchReading(engineRef.current?.getPitchReading() ?? null);
+        lastPitchUpdateRef.current = timestamp;
+      }
+
       frame = requestAnimationFrame(tick);
     };
     frame = requestAnimationFrame(tick);
@@ -599,6 +609,8 @@ export default function App() {
               onInputDeviceChange={(deviceId) => void changeInputDevice(deviceId)}
               inputDeviceDisabled={recording}
             />
+
+            <PitchMonitor reading={pitchReading} active={micReady} />
 
             <div className="transport">
               <button className="ghost-button" onClick={enableMic}>
