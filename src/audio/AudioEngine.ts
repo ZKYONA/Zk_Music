@@ -112,6 +112,10 @@ export class AudioEngine {
         .connect(this.recorderDestination);
 
       this.applyFx(this.fx);
+
+      if (this.monitorEnabled) {
+        this.master.connect(this.context.destination);
+      }
     }
 
     if (this.context.state === "suspended") {
@@ -163,7 +167,10 @@ export class AudioEngine {
   }
 
   setMonitor(enabled: boolean): void {
-    if (!this.master || !this.context || enabled === this.monitorEnabled) return;
+    if (enabled === this.monitorEnabled) return;
+    this.monitorEnabled = enabled;
+
+    if (!this.master || !this.context) return;
 
     if (enabled) {
       this.master.connect(this.context.destination);
@@ -174,8 +181,6 @@ export class AudioEngine {
         // Already disconnected.
       }
     }
-
-    this.monitorEnabled = enabled;
   }
 
   async loadBeat(file: File): Promise<void> {
