@@ -5,6 +5,7 @@ interface PitchCorrectionControlsProps {
   onChange: (next: PitchCorrectionSettings) => void;
   targetCents: number | null;
   confidence: number;
+  supported: boolean;
 }
 
 export function PitchCorrectionControls({
@@ -12,6 +13,7 @@ export function PitchCorrectionControls({
   onChange,
   targetCents,
   confidence,
+  supported,
 }: PitchCorrectionControlsProps) {
   const active =
     settings.enabled &&
@@ -40,8 +42,9 @@ export function PitchCorrectionControls({
       <label className="toggle-row correction-toggle">
         <input
           type="checkbox"
-          checked={settings.enabled}
+          checked={settings.enabled && supported}
           onChange={(event) => update("enabled", event.target.checked)}
+          disabled={!supported}
         />
         <span>Activar corrección audible</span>
       </label>
@@ -59,7 +62,7 @@ export function PitchCorrectionControls({
             step="1"
             value={settings.strength}
             onChange={(event) => update("strength", Number(event.target.value))}
-            disabled={!settings.enabled}
+            disabled={!settings.enabled || !supported}
           />
           <small>Cuánto se acerca la voz a la nota objetivo.</small>
         </label>
@@ -76,7 +79,7 @@ export function PitchCorrectionControls({
             step="5"
             value={settings.retuneMs}
             onChange={(event) => update("retuneMs", Number(event.target.value))}
-            disabled={!settings.enabled}
+            disabled={!settings.enabled || !supported}
           />
           <small>Más bajo = efecto más rápido y artificial.</small>
         </label>
@@ -95,7 +98,9 @@ export function PitchCorrectionControls({
       </div>
 
       <p className="prototype-warning">
-        Prototipo: puede introducir latencia o artefactos. No está marcado como AutoTune final.
+        {supported
+          ? "Prototipo: puede introducir latencia o artefactos. No está marcado como AutoTune final."
+          : "Este navegador no cargó el AudioWorklet de corrección; el detector de pitch seguirá funcionando sin modificar la voz."}
       </p>
     </section>
   );
