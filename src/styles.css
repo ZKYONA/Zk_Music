@@ -561,6 +561,19 @@ nav { display: grid; gap: 8px; }
   margin-top: 0;
 }
 
+.correction-presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.correction-presets .ghost-button {
+  min-height: 34px;
+  padding: 0 11px;
+  font-size: 10px;
+  font-weight: 800;
+}
+
 .correction-controls-grid {
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
