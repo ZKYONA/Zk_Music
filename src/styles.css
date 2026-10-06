@@ -510,3 +510,25 @@ nav { display: grid; gap: 8px; }
   font-size: 11px;
   line-height: 1.55;
 }
+
+
+.quality-actions {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 12px;
+  align-items: center;
+}
+
+.quality-actions .quality-note {
+  margin: 0;
+}
+
+@media (max-width: 640px) {
+  .quality-actions {
+    grid-template-columns: 1fr;
+  }
+
+  .quality-actions .primary-button {
+    width: 100%;
+  }
+}
