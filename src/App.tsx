@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { RecordingControls } from "./RecordingControls";
 import { PitchMonitor } from "./PitchMonitor";
+import { PitchCorrectionControls } from "./PitchCorrectionControls";
 import { TuningControls } from "./TuningControls";
 import { TakeLibrary, type RecordedTake } from "./TakeLibrary";
 import { loadStudioPreferences, saveStudioPreferences } from "./preferences";
@@ -12,7 +13,9 @@ import {
 } from "./storage/takeStore";
 import {
   AudioEngine,
+  DEFAULT_PITCH_CORRECTION,
   type AmbienceSettings,
+  type PitchCorrectionSettings,
   type PitchReading,
   type VocalFxSettings,
 } from "./audio/AudioEngine";
@@ -32,6 +35,7 @@ import {
 } from "./audio/characters";
 import {
   DEFAULT_TUNING,
+  findNearestScaleTarget,
   type ScaleMode,
   type TuningSettings,
 } from "./audio/tuning";
@@ -119,8 +123,17 @@ export default function App() {
   const [tuning, setTuning] = useState<TuningSettings>(
     savedPreferences.tuning ?? DEFAULT_TUNING,
   );
+  const [pitchCorrection, setPitchCorrection] =
+    useState<PitchCorrectionSettings>(
+      savedPreferences.pitchCorrection ?? DEFAULT_PITCH_CORRECTION,
+    );
+  const [pitchCorrectionSupported, setPitchCorrectionSupported] = useState(false);
   const [status, setStatus] = useState("Listo para crear.");
   const [error, setError] = useState("");
+  const pitchTarget = useMemo(
+    () => findNearestScaleTarget(pitchReading, tuning),
+    [pitchReading, tuning],
+  );
 
   useEffect(() => {
     engineRef.current?.setProfile(profile);
@@ -147,6 +160,17 @@ export default function App() {
   }, [metronome, bpm]);
 
   useEffect(() => {
+    engineRef.current?.setPitchCorrectionSettings(pitchCorrection);
+  }, [pitchCorrection]);
+
+  useEffect(() => {
+    engineRef.current?.updatePitchCorrection(
+      pitchTarget ? -pitchTarget.centsToTarget : null,
+      pitchReading?.confidence ?? 0,
+    );
+  }, [pitchTarget, pitchReading, pitchCorrection]);
+
+  useEffect(() => {
     saveStudioPreferences({
       profile,
       fx,
@@ -159,6 +183,7 @@ export default function App() {
       monitor,
       inputDeviceId,
       tuning,
+      pitchCorrection,
     });
   }, [
     profile,
@@ -172,6 +197,7 @@ export default function App() {
     monitor,
     inputDeviceId,
     tuning,
+    pitchCorrection,
   ]);
 
   useEffect(() => {
@@ -312,8 +338,18 @@ export default function App() {
     try {
       await engineRef.current?.enableMicrophone();
       setMicReady(true);
+      const supported =
+        engineRef.current?.isPitchCorrectionSupported() ?? false;
+      setPitchCorrectionSupported(supported);
+      if (!supported && pitchCorrection.enabled) {
+        setPitchCorrection((current) => ({ ...current, enabled: false }));
+      }
       await refreshInputDevices();
-      setStatus("Micrófono conectado. El audio sigue local.");
+      setStatus(
+        supported
+          ? "Micrófono conectado. El audio sigue local."
+          : "Micrófono conectado. Corrección de pitch no disponible en este navegador.",
+      );
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "No se pudo abrir el micrófono.");
     }
@@ -354,6 +390,12 @@ export default function App() {
     try {
       await engineRef.current?.startTake(true);
       setMicReady(true);
+      const supported =
+        engineRef.current?.isPitchCorrectionSupported() ?? false;
+      setPitchCorrectionSupported(supported);
+      if (!supported && pitchCorrection.enabled) {
+        setPitchCorrection((current) => ({ ...current, enabled: false }));
+      }
       setRecording(true);
       setStatus(beatName ? "Grabando voz + beat localmente…" : "Grabando voz localmente…");
     } catch (reason) {
@@ -632,6 +674,14 @@ export default function App() {
               onScaleChange={(scale: ScaleMode) =>
                 setTuning((current) => ({ ...current, scale }))
               }
+            />
+
+            <PitchCorrectionControls
+              settings={pitchCorrection}
+              onChange={setPitchCorrection}
+              targetCents={pitchTarget ? -pitchTarget.centsToTarget : null}
+              confidence={pitchReading?.confidence ?? 0}
+              supported={pitchCorrectionSupported}
             />
 
             <div className="transport">

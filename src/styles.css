@@ -529,6 +529,69 @@ nav { display: grid; gap: 8px; }
   font-size: 9px;
 }
 
+.pitch-correction-card {
+  margin-top: 10px;
+  padding: 14px;
+  display: grid;
+  gap: 12px;
+  border: 1px solid rgba(255, 178, 76, 0.13);
+  border-radius: 16px;
+  background:
+    radial-gradient(circle at 100% 0%, rgba(255, 178, 76, 0.06), transparent 42%),
+    rgba(255, 255, 255, 0.016);
+}
+
+.pitch-correction-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.pitch-correction-heading strong {
+  font-size: 12px;
+}
+
+.live-correction-chip {
+  color: #7be5ad;
+  background: rgba(84, 227, 154, 0.09);
+}
+
+.correction-toggle {
+  margin-top: 0;
+}
+
+.correction-presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.correction-presets .ghost-button {
+  min-height: 34px;
+  padding: 0 11px;
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.correction-controls-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.correction-readout {
+  align-content: center;
+}
+
+.prototype-warning {
+  margin: 0;
+  padding: 9px 10px;
+  border-radius: 10px;
+  color: #a68d69;
+  background: rgba(255, 178, 76, 0.05);
+  font-size: 9px;
+  line-height: 1.45;
+}
+
 .transport {
   flex-wrap: wrap;
   gap: 9px;
@@ -894,7 +957,8 @@ nav { display: grid; gap: 8px; }
   }
 
   .tuning-selects,
-  .pitch-target-card {
+  .pitch-target-card,
+  .correction-controls-grid {
     grid-template-columns: 1fr;
   }
 
