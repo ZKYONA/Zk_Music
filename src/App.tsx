@@ -360,6 +360,10 @@ export default function App() {
               onMetronomeChange={setMetronome}
               bpm={bpm}
               onBpmChange={setBpm}
+              inputDevices={inputDevices}
+              selectedInputDeviceId={inputDeviceId}
+              onInputDeviceChange={(deviceId) => void changeInputDevice(deviceId)}
+              inputDeviceDisabled={recording}
             />
 
             <div className="transport">
