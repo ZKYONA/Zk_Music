@@ -137,6 +137,20 @@ export default function App() {
   ]);
 
   useEffect(() => {
+    void refreshInputDevices();
+
+    const mediaDevices = navigator.mediaDevices;
+    const handleDeviceChange = () => {
+      void refreshInputDevices();
+    };
+
+    mediaDevices?.addEventListener?.("devicechange", handleDeviceChange);
+    return () => {
+      mediaDevices?.removeEventListener?.("devicechange", handleDeviceChange);
+    };
+  }, []);
+
+  useEffect(() => {
     let frame = 0;
     const tick = () => {
       setLevel(engineRef.current?.getInputLevel() ?? 0);
@@ -176,7 +190,16 @@ export default function App() {
       const nextDevices = devices ?? [];
       setInputDevices(nextDevices);
 
-      if (!inputDeviceId && nextDevices.length > 0) {
+      const savedDevice =
+        inputDeviceId &&
+        nextDevices.find((device) => device.deviceId === inputDeviceId);
+
+      if (savedDevice) {
+        await engineRef.current?.setInputDevice(savedDevice.deviceId);
+        return;
+      }
+
+      if (nextDevices.length > 0) {
         const preferred =
           nextDevices.find((device) => device.deviceId === "default") ??
           nextDevices[0];
