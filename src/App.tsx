@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { RecordingControls } from "./RecordingControls";
 import {
   AudioEngine,
   type AmbienceSettings,
@@ -54,6 +55,9 @@ export default function App() {
   const [ambience, setAmbience] = useState<AmbienceSettings>(INITIAL_AMBIENCE);
   const [micReady, setMicReady] = useState(false);
   const [beatName, setBeatName] = useState("");
+  const [beatVolume, setBeatVolume] = useState(85);
+  const [metronome, setMetronome] = useState(false);
+  const [bpm, setBpm] = useState(120);
   const [recording, setRecording] = useState(false);
   const [monitor, setMonitor] = useState(false);
   const [calibrating, setCalibrating] = useState(false);
@@ -78,6 +82,14 @@ export default function App() {
   useEffect(() => {
     engineRef.current?.setMonitor(monitor);
   }, [monitor]);
+
+  useEffect(() => {
+    engineRef.current?.setBeatVolume(beatVolume / 100);
+  }, [beatVolume]);
+
+  useEffect(() => {
+    engineRef.current?.setMetronome(metronome, bpm);
+  }, [metronome, bpm]);
 
   useEffect(() => {
     let frame = 0;
@@ -308,6 +320,15 @@ export default function App() {
               <strong>{beatName || "Importa tu beat"}</strong>
               <small>{beatName ? "Archivo cargado localmente" : "MP3, WAV, M4A y formatos compatibles"}</small>
             </label>
+
+            <RecordingControls
+              beatVolume={beatVolume}
+              onBeatVolumeChange={setBeatVolume}
+              metronome={metronome}
+              onMetronomeChange={setMetronome}
+              bpm={bpm}
+              onBpmChange={setBpm}
+            />
 
             <div className="transport">
               <button className="ghost-button" onClick={enableMic}>
