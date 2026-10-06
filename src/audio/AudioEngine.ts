@@ -64,6 +64,7 @@ export class AudioEngine {
   private recorder: MediaRecorder | null = null;
   private chunks: Blob[] = [];
   private monitorEnabled = false;
+  private calibratedGateThresholdDb: number | null = null;
   private fx: VocalFxSettings = { ...DEFAULT_FX };
 
   constructor(profile: PerformanceProfile) {
@@ -85,6 +86,7 @@ export class AudioEngine {
     if (mode === this.enhancementMode) return;
 
     this.enhancementMode = mode;
+    this.calibratedGateThresholdDb = null;
     this.applyEnhancement();
 
     if (this.micStream) {
@@ -234,13 +236,64 @@ export class AudioEngine {
     this.airEq?.gain.setTargetAtTime(enhancement.airDb, now, 0.015);
 
     if (this.noiseGate) {
-      this.noiseGate.parameters.get("thresholdDb")?.setValueAtTime(enhancement.gateThresholdDb, now);
+      const gateThreshold =
+        this.calibratedGateThresholdDb ?? enhancement.gateThresholdDb;
+      this.noiseGate.parameters.get("thresholdDb")?.setValueAtTime(gateThreshold, now);
       this.noiseGate.parameters.get("floorDb")?.setValueAtTime(enhancement.gateFloorDb, now);
       this.noiseGate.parameters.get("attackMs")?.setValueAtTime(8, now);
       this.noiseGate.parameters.get("releaseMs")?.setValueAtTime(150, now);
     }
 
     this.applyFx(this.fx);
+  }
+
+  async calibrateRoom(durationMs = 1200): Promise<number> {
+    await this.enableMicrophone();
+
+    if (!this.analyser || !this.context) {
+      throw new Error("No se pudo iniciar la calibración de ambiente.");
+    }
+
+    const startedAt = performance.now();
+    const readings: number[] = [];
+
+    while (performance.now() - startedAt < durationMs) {
+      const values = new Float32Array(this.analyser.fftSize);
+      this.analyser.getFloatTimeDomainData(values);
+
+      let sum = 0;
+      for (const value of values) {
+        sum += value * value;
+      }
+
+      const rms = Math.sqrt(sum / values.length);
+      const db = 20 * Math.log10(Math.max(rms, 0.000001));
+      readings.push(db);
+
+      await new Promise((resolve) => setTimeout(resolve, 60));
+    }
+
+    if (readings.length === 0) {
+      throw new Error("No se pudo medir el ruido ambiente.");
+    }
+
+    readings.sort((a, b) => a - b);
+    const percentileIndex = Math.min(
+      readings.length - 1,
+      Math.floor(readings.length * 0.75),
+    );
+    const noiseFloorDb = readings[percentileIndex];
+    const thresholdDb = Math.max(-60, Math.min(-28, noiseFloorDb + 8));
+
+    this.calibratedGateThresholdDb = thresholdDb;
+
+    if (this.noiseGate) {
+      this.noiseGate.parameters
+        .get("thresholdDb")
+        ?.setValueAtTime(thresholdDb, this.context.currentTime);
+    }
+
+    return thresholdDb;
   }
 
   applyFx(next: VocalFxSettings): void {
