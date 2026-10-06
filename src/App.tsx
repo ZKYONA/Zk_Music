@@ -3,6 +3,12 @@ import { RecordingControls } from "./RecordingControls";
 import { TakeLibrary, type RecordedTake } from "./TakeLibrary";
 import { loadStudioPreferences, saveStudioPreferences } from "./preferences";
 import {
+  deleteStoredTake,
+  listStoredTakes,
+  putStoredTake,
+  type StoredTake,
+} from "./storage/takeStore";
+import {
   AudioEngine,
   type AmbienceSettings,
   type VocalFxSettings,
@@ -151,6 +157,25 @@ export default function App() {
     monitor,
     inputDeviceId,
   ]);
+
+  useEffect(() => {
+    void (async () => {
+      try {
+        const stored = await listStoredTakes();
+        const restored = stored.map((take) => {
+          const url = URL.createObjectURL(take.blob);
+          takeUrlsRef.current.add(url);
+          return { ...take, url };
+        });
+        setTakes(restored);
+        if (restored.length > 0) {
+          setStatus(`${restored.length} toma${restored.length === 1 ? "" : "s"} restaurada${restored.length === 1 ? "" : "s"} localmente.`);
+        }
+      } catch {
+        // IndexedDB may be unavailable in restricted/private browser modes.
+      }
+    })();
+  }, []);
 
   useEffect(() => {
     void refreshInputDevices();
@@ -333,8 +358,25 @@ export default function App() {
       };
 
       setTakes((current) => [take, ...current]);
+
+      const storedTake: StoredTake = {
+        id: take.id,
+        name: take.name,
+        type: take.type,
+        createdAt: take.createdAt,
+        duration: take.duration,
+        peaks: take.peaks,
+        blob: take.blob,
+      };
+
+      try {
+        await putStoredTake(storedTake);
+        setStatus("Toma guardada localmente.");
+      } catch {
+        setStatus("Toma guardada en esta sesión; el navegador no permitió persistirla.");
+      }
+
       setRecording(false);
-      setStatus("Toma guardada en la sesión.");
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "No se pudo cerrar la toma.");
     }
@@ -391,9 +433,26 @@ export default function App() {
   }
 
   function renameTake(id: string, name: string) {
-    setTakes((current) =>
-      current.map((take) => (take.id === id ? { ...take, name } : take)),
-    );
+    setTakes((current) => {
+      const next = current.map((take) => (take.id === id ? { ...take, name } : take));
+      const target = next.find((take) => take.id === id);
+
+      if (target) {
+        void putStoredTake({
+          id: target.id,
+          name: target.name,
+          type: target.type,
+          createdAt: target.createdAt,
+          duration: target.duration,
+          peaks: target.peaks,
+          blob: target.blob,
+        }).catch(() => {
+          // Keep the in-memory rename even if persistence is unavailable.
+        });
+      }
+
+      return next;
+    });
   }
 
   function deleteTake(id: string) {
@@ -405,7 +464,11 @@ export default function App() {
       }
       return current.filter((take) => take.id !== id);
     });
-    setStatus("Toma eliminada de esta sesión.");
+
+    void deleteStoredTake(id).catch(() => {
+      // The in-memory take is already removed.
+    });
+    setStatus("Toma eliminada del almacenamiento local.");
   }
 
   function downloadTake(take: RecordedTake) {
