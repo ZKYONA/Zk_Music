@@ -232,9 +232,11 @@ export class AudioEngine {
       this.characterDistortion.oversample = "2x";
 
       this.ringGain = this.context.createGain();
+      this.ringGain.gain.value = 1;
       this.ringOscillator = this.context.createOscillator();
       this.ringOscillator.type = "sine";
       this.ringDepth = this.context.createGain();
+      this.ringDepth.gain.value = 0;
       this.ringOscillator.connect(this.ringDepth);
       this.ringDepth.connect(this.ringGain.gain);
       this.ringOscillator.start();
