@@ -49,6 +49,39 @@ export function PitchCorrectionControls({
         <span>Activar corrección audible</span>
       </label>
 
+      <div className="correction-presets" aria-label="Presets de corrección">
+        <button
+          type="button"
+          className="ghost-button"
+          disabled={!supported}
+          onClick={() =>
+            onChange({ enabled: true, strength: 50, retuneMs: 140 })
+          }
+        >
+          Natural
+        </button>
+        <button
+          type="button"
+          className="ghost-button"
+          disabled={!supported}
+          onClick={() =>
+            onChange({ enabled: true, strength: 78, retuneMs: 70 })
+          }
+        >
+          Tight
+        </button>
+        <button
+          type="button"
+          className="ghost-button"
+          disabled={!supported}
+          onClick={() =>
+            onChange({ enabled: true, strength: 100, retuneMs: 25 })
+          }
+        >
+          Hard Tune
+        </button>
+      </div>
+
       <div className="controls-grid correction-controls-grid">
         <label className="control">
           <span>
