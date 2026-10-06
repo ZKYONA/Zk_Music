@@ -45,7 +45,7 @@ export function TakeLibrary({
       <div className="take-library-heading">
         <div>
           <p className="eyebrow">TOMAS</p>
-          <strong>{takes.length} guardada{takes.length === 1 ? "" : "s"} en esta sesión</strong>
+          <strong>{takes.length} guardada{takes.length === 1 ? "" : "s"} en este dispositivo</strong>
         </div>
         <span className="chip">Local</span>
       </div>
