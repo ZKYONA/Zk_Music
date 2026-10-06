@@ -27,6 +27,11 @@ export interface AmbienceSettings {
   feedback: number;
 }
 
+export interface TakeAnalysis {
+  duration: number;
+  peaks: number[];
+}
+
 const DEFAULT_FX: VocalFxSettings = {
   highPass: 80,
   low: 0,
@@ -714,6 +719,46 @@ export class AudioEngine {
       this.stopBeat();
       this.stopMetronome();
     });
+  }
+
+  async analyzeTake(blob: Blob, points = 96): Promise<TakeAnalysis> {
+    const context = await this.ensureContext();
+    const bytes = await blob.arrayBuffer();
+    const buffer = await context.decodeAudioData(bytes.slice(0));
+
+    const safePoints = Math.max(24, Math.min(240, Math.floor(points)));
+    const samplesPerPoint = Math.max(
+      1,
+      Math.floor(buffer.length / safePoints),
+    );
+    const peaks: number[] = [];
+
+    for (let point = 0; point < safePoints; point += 1) {
+      const start = point * samplesPerPoint;
+      const end =
+        point === safePoints - 1
+          ? buffer.length
+          : Math.min(buffer.length, start + samplesPerPoint);
+
+      let peak = 0;
+
+      for (let channel = 0; channel < buffer.numberOfChannels; channel += 1) {
+        const samples = buffer.getChannelData(channel);
+        for (let index = start; index < end; index += 1) {
+          peak = Math.max(peak, Math.abs(samples[index] ?? 0));
+        }
+      }
+
+      peaks.push(Math.min(1, peak));
+    }
+
+    const maxPeak = Math.max(0.0001, ...peaks);
+    const normalized = peaks.map((peak) => Math.min(1, peak / maxPeak));
+
+    return {
+      duration: buffer.duration,
+      peaks: normalized,
+    };
   }
 
   getInputLevel(): number {
