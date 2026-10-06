@@ -26,7 +26,7 @@
 - Vocal comping
 
 ## Phase 2 — Vocal intelligence
-- Real pitch detection
+- [x] Real-time pitch detection
 - Pitch correction / AutoTune engine
 - Key detection
 - [x] Noise and room analysis
