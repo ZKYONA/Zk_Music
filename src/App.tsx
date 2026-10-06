@@ -101,6 +101,7 @@ export default function App() {
   const [calibrating, setCalibrating] = useState(false);
   const [takes, setTakes] = useState<RecordedTake[]>([]);
   const takeUrlsRef = useRef(new Set<string>());
+  const renameTimersRef = useRef(new Map<string, number>());
   const [level, setLevel] = useState(0);
   const [peak, setPeak] = useState(0);
   const [clipping, setClipping] = useState(false);
@@ -222,6 +223,8 @@ export default function App() {
       engineRef.current?.dispose();
       takeUrlsRef.current.forEach((url) => URL.revokeObjectURL(url));
       takeUrlsRef.current.clear();
+      renameTimersRef.current.forEach((timer) => window.clearTimeout(timer));
+      renameTimersRef.current.clear();
     };
   }, []);
 
@@ -437,18 +440,28 @@ export default function App() {
       const next = current.map((take) => (take.id === id ? { ...take, name } : take));
       const target = next.find((take) => take.id === id);
 
+      const existingTimer = renameTimersRef.current.get(id);
+      if (existingTimer !== undefined) {
+        window.clearTimeout(existingTimer);
+      }
+
       if (target) {
-        void putStoredTake({
-          id: target.id,
-          name: target.name,
-          type: target.type,
-          createdAt: target.createdAt,
-          duration: target.duration,
-          peaks: target.peaks,
-          blob: target.blob,
-        }).catch(() => {
-          // Keep the in-memory rename even if persistence is unavailable.
-        });
+        const timer = window.setTimeout(() => {
+          renameTimersRef.current.delete(id);
+          void putStoredTake({
+            id: target.id,
+            name: target.name,
+            type: target.type,
+            createdAt: target.createdAt,
+            duration: target.duration,
+            peaks: target.peaks,
+            blob: target.blob,
+          }).catch(() => {
+            // Keep the in-memory rename even if persistence is unavailable.
+          });
+        }, 450);
+
+        renameTimersRef.current.set(id, timer);
       }
 
       return next;
