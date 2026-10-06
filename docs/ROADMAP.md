@@ -14,8 +14,9 @@
 - Timeline and waveform
 - Low-latency take alignment
 - WAV/PCM recording path
-- Input device selector
-- Beat volume and metronome
+- [x] Input device selector
+- [x] Beat volume and metronome
+- [x] Local studio preferences
 - Undo/redo and project autosave via IndexedDB
 - Vocal takes and comping
 

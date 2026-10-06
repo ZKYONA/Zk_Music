@@ -5,6 +5,10 @@ interface RecordingControlsProps {
   onMetronomeChange: (enabled: boolean) => void;
   bpm: number;
   onBpmChange: (value: number) => void;
+  inputDevices: MediaDeviceInfo[];
+  selectedInputDeviceId: string;
+  onInputDeviceChange: (deviceId: string) => void;
+  inputDeviceDisabled?: boolean;
 }
 
 export function RecordingControls({
@@ -14,9 +18,37 @@ export function RecordingControls({
   onMetronomeChange,
   bpm,
   onBpmChange,
+  inputDevices,
+  selectedInputDeviceId,
+  onInputDeviceChange,
+  inputDeviceDisabled = false,
 }: RecordingControlsProps) {
   return (
     <div className="controls-grid recording-controls" aria-label="Controles de grabación">
+      <label className="control">
+        <span>
+          <strong>Entrada</strong>
+          <output>{inputDevices.length || "—"}</output>
+        </span>
+        <select
+          value={selectedInputDeviceId}
+          onChange={(event) => onInputDeviceChange(event.target.value)}
+          disabled={inputDeviceDisabled || inputDevices.length === 0}
+          aria-label="Micrófono de entrada"
+        >
+          {inputDevices.length === 0 ? (
+            <option value="">Activa el micrófono para detectar entradas</option>
+          ) : (
+            inputDevices.map((device, index) => (
+              <option key={device.deviceId || String(index)} value={device.deviceId}>
+                {device.label || `Micrófono ${index + 1}`}
+              </option>
+            ))
+          )}
+        </select>
+        <small>Cambia de micrófono sin salir del estudio.</small>
+      </label>
+
       <label className="control">
         <span>
           <strong>Beat</strong>
@@ -51,7 +83,7 @@ export function RecordingControls({
         <small>El metrónomo sigue este tempo durante la grabación.</small>
       </label>
 
-      <label className="control metronome-control">
+      <div className="control metronome-control">
         <span>
           <strong>Metrónomo</strong>
           <output>{metronome ? "ON" : "OFF"}</output>
@@ -65,7 +97,7 @@ export function RecordingControls({
           <span>Escuchar clic</span>
         </label>
         <small>Suena en tus audífonos y no se graba en la toma.</small>
-      </label>
+      </div>
     </div>
   );
 }

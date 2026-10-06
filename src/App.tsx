@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { RecordingControls } from "./RecordingControls";
+import { loadStudioPreferences, saveStudioPreferences } from "./preferences";
 import {
   AudioEngine,
   type AmbienceSettings,
@@ -41,25 +42,43 @@ function formatDb(value: number): string {
 }
 
 export default function App() {
-  const initialProfile = useMemo(() => detectDefaultProfile(), []);
+  const savedPreferences = useMemo(() => loadStudioPreferences(), []);
+  const initialProfile = useMemo(
+    () => savedPreferences.profile ?? detectDefaultProfile(),
+    [savedPreferences],
+  );
   const engineRef = useRef<AudioEngine | null>(null);
 
   if (!engineRef.current) {
     engineRef.current = new AudioEngine(initialProfile);
   }
 
-  const [profile, setProfile] = useState<PerformanceProfile>(initialProfile);
-  const [fx, setFx] = useState<VocalFxSettings>(INITIAL_FX);
-  const [enhancement, setEnhancement] = useState<VoiceEnhancementMode>("flagship");
-  const [voiceCharacter, setVoiceCharacter] = useState<VoiceCharacterMode>("natural");
-  const [ambience, setAmbience] = useState<AmbienceSettings>(INITIAL_AMBIENCE);
+  const [profile, setProfile] = useState<PerformanceProfile>(
+    savedPreferences.profile ?? initialProfile,
+  );
+  const [fx, setFx] = useState<VocalFxSettings>(
+    savedPreferences.fx ?? INITIAL_FX,
+  );
+  const [enhancement, setEnhancement] = useState<VoiceEnhancementMode>(
+    savedPreferences.enhancement ?? "flagship",
+  );
+  const [voiceCharacter, setVoiceCharacter] = useState<VoiceCharacterMode>(
+    savedPreferences.voiceCharacter ?? "natural",
+  );
+  const [ambience, setAmbience] = useState<AmbienceSettings>(
+    savedPreferences.ambience ?? INITIAL_AMBIENCE,
+  );
   const [micReady, setMicReady] = useState(false);
+  const [inputDevices, setInputDevices] = useState<MediaDeviceInfo[]>([]);
+  const [inputDeviceId, setInputDeviceId] = useState(
+    savedPreferences.inputDeviceId ?? "",
+  );
   const [beatName, setBeatName] = useState("");
-  const [beatVolume, setBeatVolume] = useState(85);
-  const [metronome, setMetronome] = useState(false);
-  const [bpm, setBpm] = useState(120);
+  const [beatVolume, setBeatVolume] = useState(savedPreferences.beatVolume ?? 85);
+  const [metronome, setMetronome] = useState(savedPreferences.metronome ?? false);
+  const [bpm, setBpm] = useState(savedPreferences.bpm ?? 120);
   const [recording, setRecording] = useState(false);
-  const [monitor, setMonitor] = useState(false);
+  const [monitor, setMonitor] = useState(savedPreferences.monitor ?? false);
   const [calibrating, setCalibrating] = useState(false);
   const [takeUrl, setTakeUrl] = useState("");
   const [takeType, setTakeType] = useState("audio/webm");
@@ -90,6 +109,46 @@ export default function App() {
   useEffect(() => {
     engineRef.current?.setMetronome(metronome, bpm);
   }, [metronome, bpm]);
+
+  useEffect(() => {
+    saveStudioPreferences({
+      profile,
+      fx,
+      enhancement,
+      voiceCharacter,
+      ambience,
+      beatVolume,
+      metronome,
+      bpm,
+      monitor,
+      inputDeviceId,
+    });
+  }, [
+    profile,
+    fx,
+    enhancement,
+    voiceCharacter,
+    ambience,
+    beatVolume,
+    metronome,
+    bpm,
+    monitor,
+    inputDeviceId,
+  ]);
+
+  useEffect(() => {
+    void refreshInputDevices();
+
+    const mediaDevices = navigator.mediaDevices;
+    const handleDeviceChange = () => {
+      void refreshInputDevices();
+    };
+
+    mediaDevices?.addEventListener?.("devicechange", handleDeviceChange);
+    return () => {
+      mediaDevices?.removeEventListener?.("devicechange", handleDeviceChange);
+    };
+  }, []);
 
   useEffect(() => {
     let frame = 0;
@@ -125,11 +184,50 @@ export default function App() {
     setStatus("Carácter de voz: " + VOICE_CHARACTER_PROFILES[mode].name + ".");
   }
 
+  async function refreshInputDevices() {
+    try {
+      const devices = await engineRef.current?.listInputDevices();
+      const nextDevices = devices ?? [];
+      setInputDevices(nextDevices);
+
+      const savedDevice =
+        inputDeviceId &&
+        nextDevices.find((device) => device.deviceId === inputDeviceId);
+
+      if (savedDevice) {
+        await engineRef.current?.setInputDevice(savedDevice.deviceId);
+        return;
+      }
+
+      if (nextDevices.length > 0) {
+        const preferred =
+          nextDevices.find((device) => device.deviceId === "default") ??
+          nextDevices[0];
+        setInputDeviceId(preferred.deviceId);
+      }
+    } catch {
+      setInputDevices([]);
+    }
+  }
+
+  async function changeInputDevice(deviceId: string) {
+    setError("");
+    try {
+      await engineRef.current?.setInputDevice(deviceId);
+      setInputDeviceId(deviceId);
+      const selected = inputDevices.find((device) => device.deviceId === deviceId);
+      setStatus("Entrada activa: " + (selected?.label || "micrófono seleccionado") + ".");
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "No se pudo cambiar el micrófono.");
+    }
+  }
+
   async function enableMic() {
     setError("");
     try {
       await engineRef.current?.enableMicrophone();
       setMicReady(true);
+      await refreshInputDevices();
       setStatus("Micrófono conectado. El audio sigue local.");
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "No se pudo abrir el micrófono.");
@@ -328,6 +426,10 @@ export default function App() {
               onMetronomeChange={setMetronome}
               bpm={bpm}
               onBpmChange={setBpm}
+              inputDevices={inputDevices}
+              selectedInputDeviceId={inputDeviceId}
+              onInputDeviceChange={(deviceId) => void changeInputDevice(deviceId)}
+              inputDeviceDisabled={recording}
             />
 
             <div className="transport">
