@@ -996,3 +996,45 @@ nav { display: grid; gap: 8px; }
     animation-iteration-count: 1 !important;
   }
 }
+
+/* Vocal preset A/B tools: responsive and keyboard-visible. */
+.vocal-preset-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 18px;
+}
+.vocal-preset-toolbar .quality-note { flex: 1 1 240px; margin: 0; }
+.vocal-preset-toolbar .ghost-button { flex: 0 0 auto; }
+.vocal-preset-toolbar .ab-active {
+  border-color: rgba(139, 108, 255, 0.72);
+  background: rgba(139, 108, 255, 0.15);
+}
+.preset-button:focus-visible,
+.vocal-preset-toolbar .ghost-button:focus-visible {
+  outline: 2px solid #a78bfa;
+  outline-offset: 3px;
+}
+@media (max-width: 550px) {
+  .vocal-preset-toolbar .ghost-button { width: 100%; }
+}
+
+/* Raw microphone headroom coaching sits beside the capture controls. */
+.input-quality-hint {
+  margin: -2px 0 14px;
+  font-size: 0.84rem;
+  line-height: 1.45;
+  color: var(--muted, #b8b6c8);
+}
+.input-quality-hint p { margin: 0.2rem 0; }
+.input-quality-hint [role="alert"] {
+  color: #ff9696;
+  font-weight: 650;
+}
+
+.vocal-preset-toolbar > small {
+  flex-basis: 100%;
+  opacity: 0.78;
+}

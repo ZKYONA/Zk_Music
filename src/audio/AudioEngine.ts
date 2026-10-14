@@ -309,9 +309,15 @@ export class AudioEngine {
   private delayWet: GainNode | null = null;
   private delayFeedback: GainNode | null = null;
   private limiter: DynamicsCompressorNode | null = null;
+  private recordingLimiter: DynamicsCompressorNode | null = null;
+  private recordingMix: GainNode | null = null;
   private master: GainNode | null = null;
+  private bypassGain: GainNode | null = null;
+  private bypassEnabled = false;
   private analyser: AnalyserNode | null = null;
+  private recordingAnalyser: AnalyserNode | null = null;
   private pitchAnalyser: AnalyserNode | null = null;
+  private inputAnalyser: AnalyserNode | null = null;
   private pitchSink: GainNode | null = null;
   private recorderDestination: MediaStreamAudioDestinationNode | null = null;
   private beatBuffer: AudioBuffer | null = null;
@@ -356,6 +362,15 @@ export class AudioEngine {
   setAmbience(next: AmbienceSettings): void {
     this.ambience = { ...next };
     this.applyAmbience();
+  }
+
+  /** A/B comparison: the direct captured mic signal still passes the safety limiter. */
+  setBypass(enabled: boolean): void {
+    this.bypassEnabled = enabled;
+    if (!this.context) return;
+
+    this.bypassGain?.gain.setTargetAtTime(enabled ? 1 : 0, this.context.currentTime, 0.015);
+    this.applyFx(this.fx);
   }
 
   async setEnhancementMode(mode: VoiceEnhancementMode): Promise<void> {
@@ -445,18 +460,30 @@ export class AudioEngine {
       this.delayWet = this.context.createGain();
       this.delayFeedback = this.context.createGain();
       this.limiter = this.context.createDynamicsCompressor();
+      this.recordingLimiter = this.context.createDynamicsCompressor();
+      this.recordingMix = this.context.createGain();
       this.master = this.context.createGain();
+      this.bypassGain = this.context.createGain();
+      this.bypassGain.gain.value = this.bypassEnabled ? 1 : 0;
 
       this.analyser = this.context.createAnalyser();
       this.analyser.fftSize = config.analyserFftSize;
       this.analyser.smoothingTimeConstant = 0.78;
+      this.recordingAnalyser = this.context.createAnalyser();
+      // ~43 ms at 48 kHz: peak checks overlap animation frames.
+      this.recordingAnalyser.fftSize = 2048;
+      this.recordingAnalyser.smoothingTimeConstant = 0;
 
+      this.inputAnalyser = this.context.createAnalyser();
+      this.inputAnalyser.fftSize = 2048;
+      this.inputAnalyser.smoothingTimeConstant = 0;
       this.pitchAnalyser = this.context.createAnalyser();
       this.pitchAnalyser.fftSize = 2048;
       this.pitchAnalyser.smoothingTimeConstant = 0;
       this.pitchSink = this.context.createGain();
       this.pitchSink.gain.value = 0;
       this.pitchAnalyser.connect(this.pitchSink).connect(this.context.destination);
+      this.inputAnalyser.connect(this.pitchSink);
 
       this.recorderDestination = this.context.createMediaStreamDestination();
       this.beatGain = this.context.createGain();
@@ -484,15 +511,24 @@ export class AudioEngine {
         .connect(this.ringGain)
         .connect(this.compressor);
 
-      this.compressor.connect(this.dryGain).connect(this.limiter);
-      this.compressor.connect(this.convolver).connect(this.reverbWet).connect(this.limiter);
-      this.compressor.connect(this.delayNode).connect(this.delayWet).connect(this.limiter);
+      // Post-gain limiting protects both the preset chain and the direct A/B path.
+      this.compressor.connect(this.dryGain).connect(this.master);
+      this.compressor.connect(this.convolver).connect(this.reverbWet).connect(this.master);
+      this.compressor.connect(this.delayNode).connect(this.delayWet).connect(this.master);
       this.delayNode.connect(this.delayFeedback).connect(this.delayNode);
 
-      this.limiter
-        .connect(this.master)
-        .connect(this.analyser)
-        .connect(this.recorderDestination);
+      this.master.connect(this.limiter);
+      this.bypassGain.connect(this.limiter);
+      this.limiter.connect(this.analyser);
+      // Beat and processed voice share one final recording limiter.
+      // Monitoring remains separate: beat is audible, mic monitoring is optional.
+      this.limiter.connect(this.recordingMix);
+      this.recordingMix.connect(this.recordingLimiter).connect(this.recordingAnalyser).connect(this.recorderDestination);
+      this.recordingLimiter.threshold.value = -1.5;
+      this.recordingLimiter.knee.value = 0;
+      this.recordingLimiter.ratio.value = 20;
+      this.recordingLimiter.attack.value = 0.003;
+      this.recordingLimiter.release.value = 0.09;
 
       this.limiter.threshold.value = -1.2;
       this.limiter.knee.value = 0;
@@ -509,7 +545,7 @@ export class AudioEngine {
       this.applyAmbience();
 
       if (this.monitorEnabled) {
-        this.master.connect(this.context.destination);
+        this.limiter.connect(this.context.destination);
       }
     }
 
@@ -541,6 +577,10 @@ export class AudioEngine {
     });
 
     this.micSource = context.createMediaStreamSource(this.micStream);
+    // Measure actual captured input *before* ZK's gate, EQ and limiter.
+    this.micSource.connect(this.inputAnalyser!);
+    // Direct signal before our gate/EQ/FX; not a separate microphone stream.
+    this.micSource.connect(this.bypassGain!);
 
     if (this.noiseGate) {
       this.micSource.connect(this.noiseGate);
@@ -718,16 +758,19 @@ export class AudioEngine {
   async calibrateRoom(durationMs = 1200): Promise<number> {
     await this.enableMicrophone();
 
-    if (!this.analyser || !this.context) {
+    if (!this.inputAnalyser || !this.context) {
       throw new Error("No se pudo iniciar la calibración de ambiente.");
+    }
+    if (!this.noiseGate) {
+      throw new Error("La calibración requiere una puerta de ruido compatible con AudioWorklet.");
     }
 
     const startedAt = performance.now();
     const readings: number[] = [];
 
     while (performance.now() - startedAt < durationMs) {
-      const values = new Float32Array(this.analyser.fftSize);
-      this.analyser.getFloatTimeDomainData(values);
+      const values = new Float32Array(this.inputAnalyser.fftSize);
+      this.inputAnalyser.getFloatTimeDomainData(values);
 
       let sum = 0;
       for (const value of values) {
@@ -789,9 +832,9 @@ export class AudioEngine {
     }
 
     this.master?.gain.setTargetAtTime(
-      dbToGain(next.output + enhancement.outputDb),
+      this.bypassEnabled ? 0 : dbToGain(next.output + enhancement.outputDb),
       now,
-      0.01,
+      0.015,
     );
   }
 
@@ -799,13 +842,13 @@ export class AudioEngine {
     if (enabled === this.monitorEnabled) return;
     this.monitorEnabled = enabled;
 
-    if (!this.master || !this.context) return;
+    if (!this.limiter || !this.context) return;
 
     if (enabled) {
-      this.master.connect(this.context.destination);
+      this.limiter.connect(this.context.destination);
     } else {
       try {
-        this.master.disconnect(this.context.destination);
+        this.limiter.disconnect(this.context.destination);
       } catch {
         // Already disconnected.
       }
@@ -832,7 +875,7 @@ export class AudioEngine {
     source.buffer = this.beatBuffer;
     source.connect(this.beatGain!);
     this.beatGain!.connect(context.destination);
-    this.beatGain!.connect(this.recorderDestination!);
+    this.beatGain!.connect(this.recordingMix!);
     source.start();
 
     source.onended = () => {
@@ -887,10 +930,17 @@ export class AudioEngine {
     };
 
     this.recorder.start(250);
-    this.startMetronome();
-
-    if (playBeat && this.beatBuffer) {
-      await this.playBeat();
+    try {
+      if (playBeat && this.beatBuffer) {
+        await this.playBeat();
+      }
+      this.startMetronome();
+    } catch (error) {
+      // A playback failure must not leave an invisible recording running.
+      this.stopBeat();
+      this.stopMetronome();
+      if (this.recorder.state === "recording") this.recorder.stop();
+      throw error;
     }
   }
 
@@ -904,12 +954,23 @@ export class AudioEngine {
     return new Promise<Blob>((resolve, reject) => {
       recorder.onerror = () => reject(new Error("No se pudo finalizar la grabación."));
       recorder.onstop = () => {
+        this.stopBeat();
+        this.stopMetronome();
         const type = recorder.mimeType || "audio/webm";
-        resolve(new Blob(this.chunks, { type }));
+        const blob = new Blob(this.chunks, { type });
+        if (blob.size === 0) {
+          reject(new Error("La grabación está vacía. Revisa los permisos del micrófono."));
+        } else {
+          resolve(blob);
+        }
       };
-      recorder.stop();
-      this.stopBeat();
-      this.stopMetronome();
+      try {
+        recorder.stop();
+      } catch (error) {
+        this.stopBeat();
+        this.stopMetronome();
+        reject(error);
+      }
     });
   }
 
@@ -970,12 +1031,12 @@ export class AudioEngine {
   }
 
   getInputMetrics(): InputMetrics {
-    if (!this.analyser) {
+    if (!this.inputAnalyser) {
       return { level: 0, peak: 0, clipping: false };
     }
 
-    const values = new Float32Array(this.analyser.fftSize);
-    this.analyser.getFloatTimeDomainData(values);
+    const values = new Float32Array(this.inputAnalyser.fftSize);
+    this.inputAnalyser.getFloatTimeDomainData(values);
 
     let sum = 0;
     let peak = 0;
@@ -990,6 +1051,19 @@ export class AudioEngine {
       peak: Math.min(1, peak),
       clipping: peak >= 0.985,
     };
+  }
+
+  /** Sample-peak of the final voice+beat recording bus (not an oversampled true peak). */
+  getRecordingMixPeak(): number {
+    if (!this.recordingAnalyser) return 0;
+
+    const values = new Float32Array(this.recordingAnalyser.fftSize);
+    this.recordingAnalyser.getFloatTimeDomainData(values);
+    let peak = 0;
+    for (const value of values) {
+      peak = Math.max(peak, Math.abs(value));
+    }
+    return Math.min(1, peak);
   }
 
   getInputLevel(): number {

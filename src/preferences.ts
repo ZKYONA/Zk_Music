@@ -7,6 +7,7 @@ import type { TuningSettings } from "./audio/tuning";
 export interface StudioPreferences {
   profile: PerformanceProfile;
   fx: VocalFxSettings;
+  vocalPresetId: string | null;
   enhancement: VoiceEnhancementMode;
   voiceCharacter: VoiceCharacterMode;
   ambience: AmbienceSettings;

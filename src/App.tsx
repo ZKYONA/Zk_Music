@@ -86,6 +86,12 @@ export default function App() {
   const [fx, setFx] = useState<VocalFxSettings>(
     savedPreferences.fx ?? INITIAL_FX,
   );
+  const [activePresetId, setActivePresetId] = useState<string | null>(
+    savedPreferences.vocalPresetId && VOCAL_PRESETS.some((item) => item.id === savedPreferences.vocalPresetId)
+      ? savedPreferences.vocalPresetId
+      : null,
+  );
+  const [bypass, setBypass] = useState(false);
   const [enhancement, setEnhancement] = useState<VoiceEnhancementMode>(
     savedPreferences.enhancement ?? "flagship",
   );
@@ -113,6 +119,7 @@ export default function App() {
   const lastPitchUpdateRef = useRef(0);
   const [level, setLevel] = useState(0);
   const [peak, setPeak] = useState(0);
+  const [mixPeak, setMixPeak] = useState(0);
   const [clipping, setClipping] = useState(false);
   const [recordingSeconds, setRecordingSeconds] = useState(0);
   const [pitchReading, setPitchReading] = useState<PitchReading | null>(null);
@@ -135,6 +142,20 @@ export default function App() {
   }, [ambience]);
 
   useEffect(() => {
+    engineRef.current?.setVoiceCharacter(voiceCharacter);
+  }, [voiceCharacter]);
+
+  useEffect(() => {
+    void engineRef.current?.setEnhancementMode(enhancement).catch((reason: unknown) => {
+      setError(reason instanceof Error ? reason.message : "No se pudo restaurar la mejora vocal.");
+    });
+  }, [enhancement]);
+
+  useEffect(() => {
+    engineRef.current?.setBypass(bypass);
+  }, [bypass]);
+
+  useEffect(() => {
     engineRef.current?.setMonitor(monitor);
   }, [monitor]);
 
@@ -150,6 +171,7 @@ export default function App() {
     saveStudioPreferences({
       profile,
       fx,
+      vocalPresetId: activePresetId,
       enhancement,
       voiceCharacter,
       ambience,
@@ -163,6 +185,7 @@ export default function App() {
   }, [
     profile,
     fx,
+    activePresetId,
     enhancement,
     voiceCharacter,
     ambience,
@@ -213,6 +236,7 @@ export default function App() {
       const metrics = engineRef.current?.getInputMetrics();
       setLevel(metrics?.level ?? 0);
       setPeak(metrics?.peak ?? 0);
+      setMixPeak(engineRef.current?.getRecordingMixPeak() ?? 0);
       setClipping(metrics?.clipping ?? false);
 
       if (timestamp - lastPitchUpdateRef.current >= 80) {
@@ -253,6 +277,7 @@ export default function App() {
     key: K,
     value: VocalFxSettings[K],
   ) {
+    setActivePresetId(null);
     setFx((current) => ({ ...current, [key]: value }));
   }
 
@@ -260,10 +285,12 @@ export default function App() {
     key: K,
     value: AmbienceSettings[K],
   ) {
+    setActivePresetId(null);
     setAmbience((current) => ({ ...current, [key]: value }));
   }
 
   function selectVoiceCharacter(mode: VoiceCharacterMode) {
+    setActivePresetId(null);
     engineRef.current?.setVoiceCharacter(mode);
     setVoiceCharacter(mode);
     setStatus("Carácter de voz: " + VOICE_CHARACTER_PROFILES[mode].name + ".");
@@ -352,6 +379,9 @@ export default function App() {
   async function startRecording() {
     setError("");
     try {
+      // A/B is only for preview: recorded takes always use the chosen processing.
+      engineRef.current?.setBypass(false);
+      setBypass(false);
       await engineRef.current?.startTake(true);
       setMicReady(true);
       setRecording(true);
@@ -365,7 +395,22 @@ export default function App() {
     setError("");
     try {
       const blob = await engineRef.current!.stopTake();
-      const analysis = await engineRef.current!.analyzeTake(blob);
+      // Stop the UI clock before potentially expensive waveform analysis and storage.
+      setRecording(false);
+
+      // A browser may record a codec that its own decodeAudioData cannot read.
+      // Never discard the user's successful recording only because waveform decoding fails.
+      let analysisUnavailable = false;
+      let analysis: { duration: number; peaks: number[] };
+      try {
+        analysis = await engineRef.current!.analyzeTake(blob);
+      } catch {
+        analysisUnavailable = true;
+        analysis = {
+          duration: Math.max(0, recordingSeconds),
+          peaks: Array.from({ length: 96 }, () => 0),
+        };
+      }
       const url = URL.createObjectURL(blob);
       takeUrlsRef.current.add(url);
 
@@ -395,14 +440,18 @@ export default function App() {
 
       try {
         await putStoredTake(storedTake);
-        setStatus("Toma guardada localmente.");
+        setStatus(analysisUnavailable
+          ? "Toma guardada: el navegador no pudo generar la forma de onda, pero puedes descargar el original."
+          : "Toma guardada localmente.");
       } catch {
         setStatus("Toma guardada en esta sesión; el navegador no permitió persistirla.");
       }
 
-      setRecording(false);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "No se pudo cerrar la toma.");
+    } finally {
+      // Never trap the UI in recording mode after failed stop or decoding.
+      setRecording(false);
     }
   }
 
@@ -411,6 +460,7 @@ export default function App() {
     try {
       await engineRef.current?.setEnhancementMode(mode);
       setEnhancement(mode);
+      setActivePresetId(null);
       setStatus("Mejora de voz: " + VOICE_ENHANCEMENT_PROFILES[mode].name + ".");
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "No se pudo cambiar la mejora de voz.");
@@ -453,7 +503,11 @@ export default function App() {
       compression: preset.compression,
       output: preset.output,
     });
-    setStatus(`Preset “${preset.name}” aplicado.`);
+    setVoiceCharacter(preset.character);
+    setAmbience({ ...preset.ambience });
+    setActivePresetId(preset.id);
+    setBypass(false);
+    setStatus(`Preset “${preset.name}” aplicado: EQ, compresión, carácter y ambiente.`);
   }
 
   function renameTake(id: string, name: string) {
@@ -490,6 +544,12 @@ export default function App() {
   }
 
   function deleteTake(id: string) {
+    const pendingRename = renameTimersRef.current.get(id);
+    if (pendingRename !== undefined) {
+      window.clearTimeout(pendingRename);
+      renameTimersRef.current.delete(id);
+    }
+
     setTakes((current) => {
       const target = current.find((take) => take.id === id);
       if (target) {
@@ -596,6 +656,19 @@ export default function App() {
                 </div>
               </div>
             </div>
+
+            {micReady && (
+              <div className="input-quality-hint">
+                <p role={clipping ? "alert" : "status"}>
+                  {clipping || peak >= 0.98
+                    ? "Entrada saturada: baja la ganancia del micrófono o aléjate un poco."
+                    : peak >= 0.8
+                      ? "Entrada muy fuerte: deja margen antes de 0 dBFS."
+                      : "El medidor muestra la señal capturada antes de los efectos y del limitador."}
+                </p>
+                <p>Mezcla voz + beat (pico de muestras): {formatPeakDb(mixPeak)}.</p>
+              </div>
+            )}
 
             <label className="drop-zone">
               <input
@@ -843,7 +916,13 @@ export default function App() {
 
           <div className="preset-row">
             {VOCAL_PRESETS.map((preset) => (
-              <button key={preset.id} className="preset-button" onClick={() => applyPreset(preset.id)}>
+              <button
+                key={preset.id}
+                className={`preset-button ${activePresetId === preset.id ? "selected-preset" : ""}`}
+                aria-pressed={activePresetId === preset.id}
+                onClick={() => applyPreset(preset.id)}
+                disabled={recording}
+              >
                 <strong>{preset.name}</strong>
                 <small>{preset.description}</small>
               </button>
@@ -854,6 +933,24 @@ export default function App() {
             </button>
           </div>
 
+          <div className="vocal-preset-toolbar">
+            <p className="quality-note">
+              {activePresetId
+                ? `Perfil activo: ${VOCAL_PRESETS.find((preset) => preset.id === activePresetId)?.name ?? "Personalizado"}. Cambia EQ, carácter y ambiente juntos.`
+                : "Sonido personalizado: puedes ajustar cada parámetro manualmente."}
+            </p>
+            <button
+              type="button"
+              className={`ghost-button ${bypass ? "ab-active" : ""}`}
+              aria-pressed={bypass}
+              onClick={() => setBypass((current) => !current)}
+              disabled={recording || !monitor || !micReady}
+              title="Necesitas activar el micrófono y monitorear con audífonos para escuchar la comparación A/B"
+            >
+              {bypass ? "A · Volver a efectos" : "B · Escuchar sin efectos"}
+            </button>
+            {!monitor && <small>Activa «Monitorear mi voz» y usa audífonos para comparar A/B.</small>}
+          </div>
           <div className="controls-grid">
             <label className="control">
               <span><strong>Filtro</strong><output>{fx.highPass} Hz</output></span>
