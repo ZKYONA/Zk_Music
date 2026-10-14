@@ -1028,7 +1028,13 @@ nav { display: grid; gap: 8px; }
   line-height: 1.45;
   color: var(--muted, #b8b6c8);
 }
-.input-quality-hint[role="alert"] {
+.input-quality-hint p { margin: 0.2rem 0; }
+.input-quality-hint [role="alert"] {
   color: #ff9696;
   font-weight: 650;
+}
+
+.vocal-preset-toolbar > small {
+  flex-basis: 100%;
+  opacity: 0.78;
 }
