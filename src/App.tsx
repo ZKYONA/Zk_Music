@@ -397,7 +397,20 @@ export default function App() {
       const blob = await engineRef.current!.stopTake();
       // Stop the UI clock before potentially expensive waveform analysis and storage.
       setRecording(false);
-      const analysis = await engineRef.current!.analyzeTake(blob);
+
+      // A browser may record a codec that its own decodeAudioData cannot read.
+      // Never discard the user's successful recording only because waveform decoding fails.
+      let analysisUnavailable = false;
+      let analysis: { duration: number; peaks: number[] };
+      try {
+        analysis = await engineRef.current!.analyzeTake(blob);
+      } catch {
+        analysisUnavailable = true;
+        analysis = {
+          duration: Math.max(0, recordingSeconds),
+          peaks: Array.from({ length: 96 }, () => 0),
+        };
+      }
       const url = URL.createObjectURL(blob);
       takeUrlsRef.current.add(url);
 
@@ -427,7 +440,9 @@ export default function App() {
 
       try {
         await putStoredTake(storedTake);
-        setStatus("Toma guardada localmente.");
+        setStatus(analysisUnavailable
+          ? "Toma guardada: el navegador no pudo generar la forma de onda, pero puedes descargar el original."
+          : "Toma guardada localmente.");
       } catch {
         setStatus("Toma guardada en esta sesión; el navegador no permitió persistirla.");
       }
