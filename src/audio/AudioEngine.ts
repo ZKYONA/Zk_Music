@@ -310,6 +310,8 @@ export class AudioEngine {
   private delayFeedback: GainNode | null = null;
   private limiter: DynamicsCompressorNode | null = null;
   private master: GainNode | null = null;
+  private bypassGain: GainNode | null = null;
+  private bypassEnabled = false;
   private analyser: AnalyserNode | null = null;
   private pitchAnalyser: AnalyserNode | null = null;
   private pitchSink: GainNode | null = null;
@@ -356,6 +358,15 @@ export class AudioEngine {
   setAmbience(next: AmbienceSettings): void {
     this.ambience = { ...next };
     this.applyAmbience();
+  }
+
+  /** A/B comparison: the direct captured mic signal still passes the safety limiter. */
+  setBypass(enabled: boolean): void {
+    this.bypassEnabled = enabled;
+    if (!this.context) return;
+
+    this.bypassGain?.gain.setTargetAtTime(enabled ? 1 : 0, this.context.currentTime, 0.015);
+    this.applyFx(this.fx);
   }
 
   async setEnhancementMode(mode: VoiceEnhancementMode): Promise<void> {
@@ -446,6 +457,8 @@ export class AudioEngine {
       this.delayFeedback = this.context.createGain();
       this.limiter = this.context.createDynamicsCompressor();
       this.master = this.context.createGain();
+      this.bypassGain = this.context.createGain();
+      this.bypassGain.gain.value = this.bypassEnabled ? 1 : 0;
 
       this.analyser = this.context.createAnalyser();
       this.analyser.fftSize = config.analyserFftSize;
@@ -484,15 +497,15 @@ export class AudioEngine {
         .connect(this.ringGain)
         .connect(this.compressor);
 
-      this.compressor.connect(this.dryGain).connect(this.limiter);
-      this.compressor.connect(this.convolver).connect(this.reverbWet).connect(this.limiter);
-      this.compressor.connect(this.delayNode).connect(this.delayWet).connect(this.limiter);
+      // Post-gain limiting protects both the preset chain and the direct A/B path.
+      this.compressor.connect(this.dryGain).connect(this.master);
+      this.compressor.connect(this.convolver).connect(this.reverbWet).connect(this.master);
+      this.compressor.connect(this.delayNode).connect(this.delayWet).connect(this.master);
       this.delayNode.connect(this.delayFeedback).connect(this.delayNode);
 
-      this.limiter
-        .connect(this.master)
-        .connect(this.analyser)
-        .connect(this.recorderDestination);
+      this.master.connect(this.limiter);
+      this.bypassGain.connect(this.limiter);
+      this.limiter.connect(this.analyser).connect(this.recorderDestination);
 
       this.limiter.threshold.value = -1.2;
       this.limiter.knee.value = 0;
@@ -509,7 +522,7 @@ export class AudioEngine {
       this.applyAmbience();
 
       if (this.monitorEnabled) {
-        this.master.connect(this.context.destination);
+        this.limiter.connect(this.context.destination);
       }
     }
 
@@ -541,6 +554,8 @@ export class AudioEngine {
     });
 
     this.micSource = context.createMediaStreamSource(this.micStream);
+    // Direct signal before our gate/EQ/FX; not a separate microphone stream.
+    this.micSource.connect(this.bypassGain!);
 
     if (this.noiseGate) {
       this.micSource.connect(this.noiseGate);
@@ -789,9 +804,9 @@ export class AudioEngine {
     }
 
     this.master?.gain.setTargetAtTime(
-      dbToGain(next.output + enhancement.outputDb),
+      this.bypassEnabled ? 0 : dbToGain(next.output + enhancement.outputDb),
       now,
-      0.01,
+      0.015,
     );
   }
 
@@ -799,13 +814,13 @@ export class AudioEngine {
     if (enabled === this.monitorEnabled) return;
     this.monitorEnabled = enabled;
 
-    if (!this.master || !this.context) return;
+    if (!this.limiter || !this.context) return;
 
     if (enabled) {
-      this.master.connect(this.context.destination);
+      this.limiter.connect(this.context.destination);
     } else {
       try {
-        this.master.disconnect(this.context.destination);
+        this.limiter.disconnect(this.context.destination);
       } catch {
         // Already disconnected.
       }
