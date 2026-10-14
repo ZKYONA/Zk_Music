@@ -309,11 +309,14 @@ export class AudioEngine {
   private delayWet: GainNode | null = null;
   private delayFeedback: GainNode | null = null;
   private limiter: DynamicsCompressorNode | null = null;
+  private recordingLimiter: DynamicsCompressorNode | null = null;
+  private recordingMix: GainNode | null = null;
   private master: GainNode | null = null;
   private bypassGain: GainNode | null = null;
   private bypassEnabled = false;
   private analyser: AnalyserNode | null = null;
   private pitchAnalyser: AnalyserNode | null = null;
+  private inputAnalyser: AnalyserNode | null = null;
   private pitchSink: GainNode | null = null;
   private recorderDestination: MediaStreamAudioDestinationNode | null = null;
   private beatBuffer: AudioBuffer | null = null;
@@ -456,6 +459,8 @@ export class AudioEngine {
       this.delayWet = this.context.createGain();
       this.delayFeedback = this.context.createGain();
       this.limiter = this.context.createDynamicsCompressor();
+      this.recordingLimiter = this.context.createDynamicsCompressor();
+      this.recordingMix = this.context.createGain();
       this.master = this.context.createGain();
       this.bypassGain = this.context.createGain();
       this.bypassGain.gain.value = this.bypassEnabled ? 1 : 0;
@@ -464,12 +469,16 @@ export class AudioEngine {
       this.analyser.fftSize = config.analyserFftSize;
       this.analyser.smoothingTimeConstant = 0.78;
 
+      this.inputAnalyser = this.context.createAnalyser();
+      this.inputAnalyser.fftSize = 512;
+      this.inputAnalyser.smoothingTimeConstant = 0;
       this.pitchAnalyser = this.context.createAnalyser();
       this.pitchAnalyser.fftSize = 2048;
       this.pitchAnalyser.smoothingTimeConstant = 0;
       this.pitchSink = this.context.createGain();
       this.pitchSink.gain.value = 0;
       this.pitchAnalyser.connect(this.pitchSink).connect(this.context.destination);
+      this.inputAnalyser.connect(this.pitchSink);
 
       this.recorderDestination = this.context.createMediaStreamDestination();
       this.beatGain = this.context.createGain();
@@ -505,7 +514,16 @@ export class AudioEngine {
 
       this.master.connect(this.limiter);
       this.bypassGain.connect(this.limiter);
-      this.limiter.connect(this.analyser).connect(this.recorderDestination);
+      this.limiter.connect(this.analyser);
+      // Beat and processed voice share one final recording limiter.
+      // Monitoring remains separate: beat is audible, mic monitoring is optional.
+      this.limiter.connect(this.recordingMix);
+      this.recordingMix.connect(this.recordingLimiter).connect(this.recorderDestination);
+      this.recordingLimiter.threshold.value = -1.5;
+      this.recordingLimiter.knee.value = 0;
+      this.recordingLimiter.ratio.value = 20;
+      this.recordingLimiter.attack.value = 0.003;
+      this.recordingLimiter.release.value = 0.09;
 
       this.limiter.threshold.value = -1.2;
       this.limiter.knee.value = 0;
@@ -554,6 +572,8 @@ export class AudioEngine {
     });
 
     this.micSource = context.createMediaStreamSource(this.micStream);
+    // Measure actual captured input *before* ZK's gate, EQ and limiter.
+    this.micSource.connect(this.inputAnalyser!);
     // Direct signal before our gate/EQ/FX; not a separate microphone stream.
     this.micSource.connect(this.bypassGain!);
 
@@ -733,7 +753,7 @@ export class AudioEngine {
   async calibrateRoom(durationMs = 1200): Promise<number> {
     await this.enableMicrophone();
 
-    if (!this.analyser || !this.context) {
+    if (!this.inputAnalyser || !this.context) {
       throw new Error("No se pudo iniciar la calibración de ambiente.");
     }
 
@@ -741,8 +761,8 @@ export class AudioEngine {
     const readings: number[] = [];
 
     while (performance.now() - startedAt < durationMs) {
-      const values = new Float32Array(this.analyser.fftSize);
-      this.analyser.getFloatTimeDomainData(values);
+      const values = new Float32Array(this.inputAnalyser.fftSize);
+      this.inputAnalyser.getFloatTimeDomainData(values);
 
       let sum = 0;
       for (const value of values) {
@@ -847,7 +867,7 @@ export class AudioEngine {
     source.buffer = this.beatBuffer;
     source.connect(this.beatGain!);
     this.beatGain!.connect(context.destination);
-    this.beatGain!.connect(this.recorderDestination!);
+    this.beatGain!.connect(this.recordingMix!);
     source.start();
 
     source.onended = () => {
@@ -985,12 +1005,12 @@ export class AudioEngine {
   }
 
   getInputMetrics(): InputMetrics {
-    if (!this.analyser) {
+    if (!this.inputAnalyser) {
       return { level: 0, peak: 0, clipping: false };
     }
 
-    const values = new Float32Array(this.analyser.fftSize);
-    this.analyser.getFloatTimeDomainData(values);
+    const values = new Float32Array(this.inputAnalyser.fftSize);
+    this.inputAnalyser.getFloatTimeDomainData(values);
 
     let sum = 0;
     let peak = 0;
