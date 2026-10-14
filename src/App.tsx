@@ -119,6 +119,7 @@ export default function App() {
   const lastPitchUpdateRef = useRef(0);
   const [level, setLevel] = useState(0);
   const [peak, setPeak] = useState(0);
+  const [mixPeak, setMixPeak] = useState(0);
   const [clipping, setClipping] = useState(false);
   const [recordingSeconds, setRecordingSeconds] = useState(0);
   const [pitchReading, setPitchReading] = useState<PitchReading | null>(null);
@@ -235,6 +236,7 @@ export default function App() {
       const metrics = engineRef.current?.getInputMetrics();
       setLevel(metrics?.level ?? 0);
       setPeak(metrics?.peak ?? 0);
+      setMixPeak(engineRef.current?.getRecordingMixPeak() ?? 0);
       setClipping(metrics?.clipping ?? false);
 
       if (timestamp - lastPitchUpdateRef.current >= 80) {
@@ -641,13 +643,16 @@ export default function App() {
             </div>
 
             {micReady && (
-              <p className="input-quality-hint" role={clipping ? "alert" : "status"}>
-                {clipping || peak >= 0.98
-                  ? "Entrada saturada: baja la ganancia del micrófono o aléjate un poco."
-                  : peak >= 0.8
-                    ? "Entrada muy fuerte: deja margen antes de 0 dBFS."
-                    : "El medidor muestra la señal capturada antes de los efectos y del limitador."}
-              </p>
+              <div className="input-quality-hint">
+                <p role={clipping ? "alert" : "status"}>
+                  {clipping || peak >= 0.98
+                    ? "Entrada saturada: baja la ganancia del micrófono o aléjate un poco."
+                    : peak >= 0.8
+                      ? "Entrada muy fuerte: deja margen antes de 0 dBFS."
+                      : "El medidor muestra la señal capturada antes de los efectos y del limitador."}
+                </p>
+                <p>Mezcla voz + beat (pico de muestras): {formatPeakDb(mixPeak)}.</p>
+              </div>
             )}
 
             <label className="drop-zone">
@@ -924,11 +929,12 @@ export default function App() {
               className={`ghost-button ${bypass ? "ab-active" : ""}`}
               aria-pressed={bypass}
               onClick={() => setBypass((current) => !current)}
-              disabled={recording}
-              title="Compara la señal capturada sin EQ/FX con la cadena procesada"
+              disabled={recording || !monitor || !micReady}
+              title="Necesitas activar el micrófono y monitorear con audífonos para escuchar la comparación A/B"
             >
               {bypass ? "A · Volver a efectos" : "B · Escuchar sin efectos"}
             </button>
+            {!monitor && <small>Activa «Monitorear mi voz» y usa audífonos para comparar A/B.</small>}
           </div>
           <div className="controls-grid">
             <label className="control">
