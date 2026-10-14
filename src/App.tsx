@@ -145,6 +145,12 @@ export default function App() {
   }, [voiceCharacter]);
 
   useEffect(() => {
+    void engineRef.current?.setEnhancementMode(enhancement).catch((reason: unknown) => {
+      setError(reason instanceof Error ? reason.message : "No se pudo restaurar la mejora vocal.");
+    });
+  }, [enhancement]);
+
+  useEffect(() => {
     engineRef.current?.setBypass(bypass);
   }, [bypass]);
 
@@ -371,6 +377,9 @@ export default function App() {
   async function startRecording() {
     setError("");
     try {
+      // A/B is only for preview: recorded takes always use the chosen processing.
+      engineRef.current?.setBypass(false);
+      setBypass(false);
       await engineRef.current?.startTake(true);
       setMicReady(true);
       setRecording(true);
@@ -430,6 +439,7 @@ export default function App() {
     try {
       await engineRef.current?.setEnhancementMode(mode);
       setEnhancement(mode);
+      setActivePresetId(null);
       setStatus("Mejora de voz: " + VOICE_ENHANCEMENT_PROFILES[mode].name + ".");
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "No se pudo cambiar la mejora de voz.");
