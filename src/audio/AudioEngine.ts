@@ -315,6 +315,7 @@ export class AudioEngine {
   private bypassGain: GainNode | null = null;
   private bypassEnabled = false;
   private analyser: AnalyserNode | null = null;
+  private recordingAnalyser: AnalyserNode | null = null;
   private pitchAnalyser: AnalyserNode | null = null;
   private inputAnalyser: AnalyserNode | null = null;
   private pitchSink: GainNode | null = null;
@@ -468,6 +469,9 @@ export class AudioEngine {
       this.analyser = this.context.createAnalyser();
       this.analyser.fftSize = config.analyserFftSize;
       this.analyser.smoothingTimeConstant = 0.78;
+      this.recordingAnalyser = this.context.createAnalyser();
+      this.recordingAnalyser.fftSize = 512;
+      this.recordingAnalyser.smoothingTimeConstant = 0;
 
       this.inputAnalyser = this.context.createAnalyser();
       this.inputAnalyser.fftSize = 512;
@@ -518,7 +522,7 @@ export class AudioEngine {
       // Beat and processed voice share one final recording limiter.
       // Monitoring remains separate: beat is audible, mic monitoring is optional.
       this.limiter.connect(this.recordingMix);
-      this.recordingMix.connect(this.recordingLimiter).connect(this.recorderDestination);
+      this.recordingMix.connect(this.recordingLimiter).connect(this.recordingAnalyser).connect(this.recorderDestination);
       this.recordingLimiter.threshold.value = -1.5;
       this.recordingLimiter.knee.value = 0;
       this.recordingLimiter.ratio.value = 20;
@@ -1046,6 +1050,19 @@ export class AudioEngine {
       peak: Math.min(1, peak),
       clipping: peak >= 0.985,
     };
+  }
+
+  /** Sample-peak of the final voice+beat recording bus (not an oversampled true peak). */
+  getRecordingMixPeak(): number {
+    if (!this.recordingAnalyser) return 0;
+
+    const values = new Float32Array(this.recordingAnalyser.fftSize);
+    this.recordingAnalyser.getFloatTimeDomainData(values);
+    let peak = 0;
+    for (const value of values) {
+      peak = Math.max(peak, Math.abs(value));
+    }
+    return Math.min(1, peak);
   }
 
   getInputLevel(): number {
