@@ -48,6 +48,8 @@ Choosing a preset now updates the vocal EQ, compressor, voice character and reve
 
 **A/B preview:** use **Escuchar sin efectos** to hear the captured microphone before ZK Music's gate, EQ, compression and ambience; the comparison still goes through a final safety limiter. Your device/browser microphone processing may remain active. Monitoring requires headphones to avoid feedback. Recording always restores the processed path, and the A/B toggle is disabled while a take is active.
 
+The input meter now reads the captured microphone *before ZK's effects and limiter*, so it can warn when the input is too strong. The separate mix reading measures the sample peak of the recorded voice+beat bus **after** its own final limiter; this is not a true-peak measurement or LUFS/loudness analysis. The final limiter reduces overload risk but does not guarantee that all recordings are distortion-free. If clipping appears at the input, reduce microphone gain before recording. Recording errors and empty captures now surface to the user. Room calibration requires an available AudioWorklet noise gate; otherwise an explicit error is shown. A/B is available while monitoring through headphones and is disabled while recording.
+
 These are curated starting points, **not** automatic vocal analysis or real-time pitch correction. Check recording gain and listen in context: presets cannot compensate for an overloaded microphone or a poor acoustic environment.
 
 Then open the local Vite URL and allow microphone access when prompted.
