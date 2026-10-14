@@ -1020,3 +1020,15 @@ nav { display: grid; gap: 8px; }
 @media (max-width: 550px) {
   .vocal-preset-toolbar .ghost-button { width: 100%; }
 }
+
+/* Raw microphone headroom coaching sits beside the capture controls. */
+.input-quality-hint {
+  margin: -2px 0 14px;
+  font-size: 0.84rem;
+  line-height: 1.45;
+  color: var(--muted, #b8b6c8);
+}
+.input-quality-hint[role="alert"] {
+  color: #ff9696;
+  font-weight: 650;
+}
