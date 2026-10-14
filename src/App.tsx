@@ -393,6 +393,8 @@ export default function App() {
     setError("");
     try {
       const blob = await engineRef.current!.stopTake();
+      // Stop the UI clock before potentially expensive waveform analysis and storage.
+      setRecording(false);
       const analysis = await engineRef.current!.analyzeTake(blob);
       const url = URL.createObjectURL(blob);
       takeUrlsRef.current.add(url);
@@ -428,9 +430,11 @@ export default function App() {
         setStatus("Toma guardada en esta sesión; el navegador no permitió persistirla.");
       }
 
-      setRecording(false);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "No se pudo cerrar la toma.");
+    } finally {
+      // Never trap the UI in recording mode after failed stop or decoding.
+      setRecording(false);
     }
   }
 
@@ -523,6 +527,12 @@ export default function App() {
   }
 
   function deleteTake(id: string) {
+    const pendingRename = renameTimersRef.current.get(id);
+    if (pendingRename !== undefined) {
+      window.clearTimeout(pendingRename);
+      renameTimersRef.current.delete(id);
+    }
+
     setTakes((current) => {
       const target = current.find((take) => take.id === id);
       if (target) {
@@ -629,6 +639,16 @@ export default function App() {
                 </div>
               </div>
             </div>
+
+            {micReady && (
+              <p className="input-quality-hint" role={clipping ? "alert" : "status"}>
+                {clipping || peak >= 0.98
+                  ? "Entrada saturada: baja la ganancia del micrófono o aléjate un poco."
+                  : peak >= 0.8
+                    ? "Entrada muy fuerte: deja margen antes de 0 dBFS."
+                    : "El medidor muestra la señal capturada antes de los efectos y del limitador."}
+              </p>
+            )}
 
             <label className="drop-zone">
               <input
