@@ -756,6 +756,9 @@ export class AudioEngine {
     if (!this.inputAnalyser || !this.context) {
       throw new Error("No se pudo iniciar la calibración de ambiente.");
     }
+    if (!this.noiseGate) {
+      throw new Error("La calibración requiere una puerta de ruido compatible con AudioWorklet.");
+    }
 
     const startedAt = performance.now();
     const readings: number[] = [];
@@ -922,10 +925,17 @@ export class AudioEngine {
     };
 
     this.recorder.start(250);
-    this.startMetronome();
-
-    if (playBeat && this.beatBuffer) {
-      await this.playBeat();
+    try {
+      if (playBeat && this.beatBuffer) {
+        await this.playBeat();
+      }
+      this.startMetronome();
+    } catch (error) {
+      // A playback failure must not leave an invisible recording running.
+      this.stopBeat();
+      this.stopMetronome();
+      if (this.recorder.state === "recording") this.recorder.stop();
+      throw error;
     }
   }
 
@@ -939,12 +949,23 @@ export class AudioEngine {
     return new Promise<Blob>((resolve, reject) => {
       recorder.onerror = () => reject(new Error("No se pudo finalizar la grabación."));
       recorder.onstop = () => {
+        this.stopBeat();
+        this.stopMetronome();
         const type = recorder.mimeType || "audio/webm";
-        resolve(new Blob(this.chunks, { type }));
+        const blob = new Blob(this.chunks, { type });
+        if (blob.size === 0) {
+          reject(new Error("La grabación está vacía. Revisa los permisos del micrófono."));
+        } else {
+          resolve(blob);
+        }
       };
-      recorder.stop();
-      this.stopBeat();
-      this.stopMetronome();
+      try {
+        recorder.stop();
+      } catch (error) {
+        this.stopBeat();
+        this.stopMetronome();
+        reject(error);
+      }
     });
   }
 
