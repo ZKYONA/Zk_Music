@@ -86,6 +86,12 @@ export default function App() {
   const [fx, setFx] = useState<VocalFxSettings>(
     savedPreferences.fx ?? INITIAL_FX,
   );
+  const [activePresetId, setActivePresetId] = useState<string | null>(
+    savedPreferences.vocalPresetId && VOCAL_PRESETS.some((item) => item.id === savedPreferences.vocalPresetId)
+      ? savedPreferences.vocalPresetId
+      : null,
+  );
+  const [bypass, setBypass] = useState(false);
   const [enhancement, setEnhancement] = useState<VoiceEnhancementMode>(
     savedPreferences.enhancement ?? "flagship",
   );
@@ -135,6 +141,14 @@ export default function App() {
   }, [ambience]);
 
   useEffect(() => {
+    engineRef.current?.setVoiceCharacter(voiceCharacter);
+  }, [voiceCharacter]);
+
+  useEffect(() => {
+    engineRef.current?.setBypass(bypass);
+  }, [bypass]);
+
+  useEffect(() => {
     engineRef.current?.setMonitor(monitor);
   }, [monitor]);
 
@@ -150,6 +164,7 @@ export default function App() {
     saveStudioPreferences({
       profile,
       fx,
+      vocalPresetId: activePresetId,
       enhancement,
       voiceCharacter,
       ambience,
@@ -163,6 +178,7 @@ export default function App() {
   }, [
     profile,
     fx,
+    activePresetId,
     enhancement,
     voiceCharacter,
     ambience,
@@ -253,6 +269,7 @@ export default function App() {
     key: K,
     value: VocalFxSettings[K],
   ) {
+    setActivePresetId(null);
     setFx((current) => ({ ...current, [key]: value }));
   }
 
@@ -260,10 +277,12 @@ export default function App() {
     key: K,
     value: AmbienceSettings[K],
   ) {
+    setActivePresetId(null);
     setAmbience((current) => ({ ...current, [key]: value }));
   }
 
   function selectVoiceCharacter(mode: VoiceCharacterMode) {
+    setActivePresetId(null);
     engineRef.current?.setVoiceCharacter(mode);
     setVoiceCharacter(mode);
     setStatus("Carácter de voz: " + VOICE_CHARACTER_PROFILES[mode].name + ".");
@@ -453,7 +472,11 @@ export default function App() {
       compression: preset.compression,
       output: preset.output,
     });
-    setStatus(`Preset “${preset.name}” aplicado.`);
+    setVoiceCharacter(preset.character);
+    setAmbience({ ...preset.ambience });
+    setActivePresetId(preset.id);
+    setBypass(false);
+    setStatus(`Preset “${preset.name}” aplicado: EQ, compresión, carácter y ambiente.`);
   }
 
   function renameTake(id: string, name: string) {
@@ -843,7 +866,13 @@ export default function App() {
 
           <div className="preset-row">
             {VOCAL_PRESETS.map((preset) => (
-              <button key={preset.id} className="preset-button" onClick={() => applyPreset(preset.id)}>
+              <button
+                key={preset.id}
+                className={`preset-button ${activePresetId === preset.id ? "selected-preset" : ""}`}
+                aria-pressed={activePresetId === preset.id}
+                onClick={() => applyPreset(preset.id)}
+                disabled={recording}
+              >
                 <strong>{preset.name}</strong>
                 <small>{preset.description}</small>
               </button>
@@ -854,6 +883,23 @@ export default function App() {
             </button>
           </div>
 
+          <div className="vocal-preset-toolbar">
+            <p className="quality-note">
+              {activePresetId
+                ? `Perfil activo: ${VOCAL_PRESETS.find((preset) => preset.id === activePresetId)?.name ?? "Personalizado"}. Cambia EQ, carácter y ambiente juntos.`
+                : "Sonido personalizado: puedes ajustar cada parámetro manualmente."}
+            </p>
+            <button
+              type="button"
+              className={`ghost-button ${bypass ? "ab-active" : ""}`}
+              aria-pressed={bypass}
+              onClick={() => setBypass((current) => !current)}
+              disabled={recording}
+              title="Compara la señal capturada sin EQ/FX con la cadena procesada"
+            >
+              {bypass ? "A · Volver a efectos" : "B · Escuchar sin efectos"}
+            </button>
+          </div>
           <div className="controls-grid">
             <label className="control">
               <span><strong>Filtro</strong><output>{fx.highPass} Hz</output></span>
