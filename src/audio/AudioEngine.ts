@@ -470,11 +470,12 @@ export class AudioEngine {
       this.analyser.fftSize = config.analyserFftSize;
       this.analyser.smoothingTimeConstant = 0.78;
       this.recordingAnalyser = this.context.createAnalyser();
-      this.recordingAnalyser.fftSize = 512;
+      // ~43 ms at 48 kHz: peak checks overlap animation frames.
+      this.recordingAnalyser.fftSize = 2048;
       this.recordingAnalyser.smoothingTimeConstant = 0;
 
       this.inputAnalyser = this.context.createAnalyser();
-      this.inputAnalyser.fftSize = 512;
+      this.inputAnalyser.fftSize = 2048;
       this.inputAnalyser.smoothingTimeConstant = 0;
       this.pitchAnalyser = this.context.createAnalyser();
       this.pitchAnalyser.fftSize = 2048;
